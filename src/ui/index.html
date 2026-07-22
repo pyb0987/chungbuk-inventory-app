@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>충북사무소 재고관리</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <strong>충북사무소</strong>
+          <span>재고관리</span>
+        </div>
+        <nav class="nav" aria-label="주요 화면">
+          <button class="nav-button active" data-view="dashboard">현황</button>
+          <button class="nav-button" data-view="inventory">재고표</button>
+          <button class="nav-button" data-view="transactions">입출고</button>
+          <button class="nav-button" data-view="serials">시리얼</button>
+          <button class="nav-button" data-view="import">가져오기</button>
+          <button class="nav-button" data-view="backup">백업</button>
+          <button class="nav-button" data-view="audit">기록</button>
+        </nav>
+      </aside>
+
+      <main class="content">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">로컬 저장</p>
+            <h1>충북사무소 재고관리</h1>
+          </div>
+          <div class="status-line" id="status-line">연결 중</div>
+        </header>
+
+        <section class="metric-grid" id="metric-grid" aria-label="재고 요약"></section>
+
+        <section class="view active" id="view-dashboard">
+          <div class="section-header">
+            <h2>현황</h2>
+            <button class="secondary-button" id="refresh-button" type="button">새로고침</button>
+          </div>
+          <div class="dashboard-grid">
+            <section class="panel">
+              <h3>최근 입출고</h3>
+              <div class="table-wrap compact">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>날짜</th>
+                      <th>구분</th>
+                      <th>품목</th>
+                      <th>수량</th>
+                    </tr>
+                  </thead>
+                  <tbody id="recent-transactions"></tbody>
+                </table>
+              </div>
+            </section>
+            <section class="panel">
+              <h3>최근 가져오기</h3>
+              <div id="recent-import" class="empty-block">기록 없음</div>
+            </section>
+            <section class="panel">
+              <h3>최근 백업</h3>
+              <div id="recent-backup" class="empty-block">기록 없음</div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="view-inventory">
+          <div class="section-header">
+            <h2>재고표</h2>
+            <input id="inventory-search" class="search-input" type="search" placeholder="품목 검색" />
+          </div>
+          <div class="table-wrap inventory-table-wrap">
+            <table id="inventory-table"></table>
+          </div>
+          <section class="panel inventory-adjustment-panel">
+            <h2>재고 조정</h2>
+            <form id="adjustment-form" class="form-grid">
+              <label>
+                날짜
+                <input name="occurredOn" type="date" required />
+              </label>
+              <label class="wide">
+                품목
+                <div class="item-picker" data-item-picker="adjustment">
+                  <input name="itemSearch" type="search" placeholder="품목명 검색 후 아래 목록에서 선택" autocomplete="off" />
+                  <input name="itemId" type="hidden" />
+                  <div class="item-suggestion-list" data-item-picker-list="adjustment" role="listbox"></div>
+                </div>
+              </label>
+              <label>
+                위치
+                <select name="bucket" required></select>
+              </label>
+              <label>
+                개인 (위치가 개인일 때)
+                <select name="holderId"></select>
+              </label>
+              <label>
+                조정 수량
+                <input name="quantityDelta" type="number" step="1" required placeholder="-1 또는 1" />
+              </label>
+              <label class="wide">
+                사유
+                <input name="reason" type="text" required placeholder="실사 조정, 오입력 수정 등" />
+              </label>
+              <div class="movement-preview wide" id="adjustment-preview">재고 조정 대기</div>
+              <button class="primary-button wide" type="submit">조정 저장</button>
+            </form>
+          </section>
+        </section>
+
+        <section class="view" id="view-transactions">
+          <div class="two-column">
+            <section class="panel">
+              <div class="section-header">
+                <h2>입출고 입력</h2>
+                <button class="secondary-button hidden" id="cancel-transaction-edit" type="button">수정 취소</button>
+              </div>
+              <form id="transaction-form" class="form-grid">
+                <label>
+                  날짜
+                  <input name="occurredOn" type="date" required />
+                </label>
+                <label>
+                  구분
+                  <select name="type" required></select>
+                </label>
+                <label>
+                  품목
+                  <div class="item-picker" data-item-picker="transaction">
+                    <input name="itemSearch" type="search" placeholder="품목명 검색 후 아래 목록에서 선택" autocomplete="off" />
+                    <input name="itemId" type="hidden" />
+                    <div class="item-suggestion-list" data-item-picker-list="transaction" role="listbox"></div>
+                  </div>
+                </label>
+                <label>
+                  개인
+                  <select name="personId"></select>
+                </label>
+                <label>
+                  수량
+                  <input name="quantity" type="number" min="1" step="1" required />
+                </label>
+                <label>
+                  시리얼
+                  <input name="serialText" type="text" />
+                </label>
+                <label class="wide">
+                  메모
+                  <input name="note" type="text" />
+                </label>
+                <div class="movement-preview" id="movement-preview">변동 대기</div>
+                <input name="editingId" type="hidden" />
+                <button class="primary-button wide" name="submitButton" type="submit">저장</button>
+              </form>
+            </section>
+
+            <section class="panel">
+              <h2>품목/개인 등록</h2>
+              <form id="item-form" class="inline-form">
+                <input name="name" type="text" placeholder="새 품목명" required />
+                <button class="secondary-button" type="submit">품목 추가</button>
+              </form>
+              <form id="person-form" class="inline-form">
+                <input name="name" type="text" placeholder="새 개인명" required />
+                <button class="secondary-button" type="submit">개인 추가</button>
+              </form>
+              <div class="management-grid">
+                <div>
+                  <h3>품목 관리</h3>
+                  <div class="table-wrap compact">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>품목</th>
+                          <th>상태</th>
+                          <th>작업</th>
+                        </tr>
+                      </thead>
+                      <tbody id="item-table"></tbody>
+                    </table>
+                  </div>
+                </div>
+                <div>
+                  <h3>개인 관리</h3>
+                  <div class="table-wrap compact">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>개인</th>
+                          <th>상태</th>
+                          <th>작업</th>
+                        </tr>
+                      </thead>
+                      <tbody id="person-table"></tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <section class="panel">
+            <div class="section-header">
+              <h2>입출고 내역</h2>
+              <input id="transaction-search" class="search-input" type="search" placeholder="품목, 개인, 메모 검색" />
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>날짜</th>
+                    <th>구분</th>
+                    <th>품목</th>
+                    <th>개인</th>
+                    <th>수량</th>
+                    <th>시리얼</th>
+                    <th>메모</th>
+                    <th>상태</th>
+                    <th>작업</th>
+                  </tr>
+                </thead>
+                <tbody id="transaction-table"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <section class="view" id="view-import">
+          <section class="panel">
+            <h2>현재 재고 가져오기</h2>
+            <form id="import-form" class="import-form">
+              <div class="form-grid">
+                <label>
+                  파일명
+                  <input name="sourceFile" type="text" value="선택한_재고현황.xlsx" required />
+                </label>
+                <label>
+                  기준일
+                  <input name="occurredOn" type="date" required />
+                </label>
+                <label>
+                  모드
+                  <select name="mode">
+                    <option value="initial">최초 가져오기</option>
+                    <option value="additive">추가 가져오기</option>
+                  </select>
+                </label>
+                <label class="checkbox-label">
+                  <input name="allowPartial" type="checkbox" />
+                  오류 없는 행만 가져오기
+                </label>
+                <label class="checkbox-label">
+                  <input name="allowDuplicate" type="checkbox" />
+                  같은 재고 다시 가져오기 허용
+                </label>
+              </div>
+              <label class="wide">
+                재고현황 .xlsx 파일
+                <input name="workbookFile" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+              </label>
+              <label class="wide">
+                붙여넣기 표 또는 파일 선택 없이 임시 가져오기
+                <textarea name="rowsText" rows="9" spellcheck="false" placeholder="품목,파트실,사무실,개인명1,개인명2"></textarea>
+              </label>
+              <button class="primary-button" type="submit">가져오기</button>
+            </form>
+            <div id="import-result" class="result-block"></div>
+          </section>
+          <section class="panel">
+            <h2>사용내역 가져오기</h2>
+            <form id="usage-import-form" class="import-form">
+              <div class="form-grid">
+                <label>
+                  파일명
+                  <input name="sourceFile" type="text" value="선택한_사용내역.xlsb" required />
+                </label>
+                <label class="checkbox-label">
+                  <input name="allowPartial" type="checkbox" />
+                  오류 없는 행만 가져오기
+                </label>
+                <label class="checkbox-label">
+                  <input name="allowDuplicate" type="checkbox" />
+                  같은 사용내역 다시 가져오기 허용
+                </label>
+              </div>
+              <label class="wide">
+                사용내역 .xlsb 또는 .xlsx 파일
+                <input name="usageWorkbookFile" type="file" accept=".xlsb,.xlsx,application/vnd.ms-excel.sheet.binary.macroEnabled.12,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+              </label>
+              <button class="primary-button" type="submit">사용내역 가져오기</button>
+            </form>
+            <div id="usage-import-result" class="result-block"></div>
+          </section>
+          <section class="panel">
+            <h2>사용내역 참고 기록</h2>
+            <div class="table-wrap compact">
+              <table>
+                <thead>
+                  <tr>
+                    <th>날짜</th>
+                    <th>원본</th>
+                    <th>구분</th>
+                    <th>이름</th>
+                    <th>품목</th>
+                    <th>시리얼</th>
+                    <th>수량</th>
+                    <th>메모</th>
+                  </tr>
+                </thead>
+                <tbody id="legacy-usage-table"></tbody>
+              </table>
+            </div>
+          </section>
+          <section class="panel">
+            <h2>가져오기 기록</h2>
+            <div class="table-wrap compact">
+              <table>
+                <thead>
+                  <tr>
+                    <th>시간</th>
+                    <th>파일</th>
+                    <th>상태</th>
+                    <th>가져온 행</th>
+                    <th>건너뜀</th>
+                    <th>생성</th>
+                  </tr>
+                </thead>
+                <tbody id="import-run-table"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <section class="view" id="view-serials">
+          <div class="two-column">
+            <section class="panel">
+              <div class="section-header">
+                <h2>시리얼 등록</h2>
+                <button class="secondary-button hidden" id="cancel-serial-edit" type="button">수정 취소</button>
+              </div>
+              <form id="serial-form" class="form-grid">
+                <label class="wide">
+                  품목
+                  <div class="item-picker" data-item-picker="serial">
+                    <input name="itemSearch" type="search" placeholder="품목명 검색 후 아래 목록에서 선택" autocomplete="off" />
+                    <input name="itemId" type="hidden" />
+                    <div class="item-suggestion-list" data-item-picker-list="serial" role="listbox"></div>
+                  </div>
+                </label>
+                <label>
+                  시리얼
+                  <input name="serialText" type="text" required />
+                </label>
+                <label>
+                  보유/위치
+                  <input name="holderText" type="text" placeholder="파트실, 사무실, 개인명 등" />
+                </label>
+                <label class="wide">
+                  메모
+                  <input name="note" type="text" />
+                </label>
+                <input name="editingId" type="hidden" />
+                <button class="primary-button wide" name="submitButton" type="submit">시리얼 저장</button>
+              </form>
+            </section>
+
+            <section class="panel">
+              <div class="section-header">
+                <h2>시리얼 목록</h2>
+                <input id="serial-search" class="search-input" type="search" placeholder="시리얼, 품목, 위치 검색" />
+              </div>
+              <div class="table-wrap compact">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>품목</th>
+                      <th>시리얼</th>
+                      <th>보유/위치</th>
+                      <th>메모</th>
+                      <th>상태</th>
+                      <th>작업</th>
+                    </tr>
+                  </thead>
+                  <tbody id="serial-table"></tbody>
+                </table>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="view-backup">
+          <section class="panel">
+            <div class="section-header">
+              <h2>백업</h2>
+              <form id="backup-form" class="inline-form">
+                <input name="reason" type="text" value="수동 백업" required />
+                <button class="secondary-button" type="submit">백업 만들기</button>
+              </form>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>시간</th>
+                    <th>사유</th>
+                    <th>상태</th>
+                    <th>크기</th>
+                    <th>파일</th>
+                    <th>작업</th>
+                  </tr>
+                </thead>
+                <tbody id="backup-table"></tbody>
+              </table>
+            </div>
+            <form id="restore-form" class="restore-form">
+              <h3>백업 복원</h3>
+              <label>
+                백업 파일
+                <input name="backupFile" type="file" accept=".sqlite,.db,application/octet-stream" required />
+              </label>
+              <button class="danger-button" type="submit">선택한 백업으로 복원</button>
+            </form>
+            <div id="restore-result" class="result-block"></div>
+          </section>
+        </section>
+
+        <section class="view" id="view-audit">
+          <section class="panel">
+            <div class="section-header">
+              <h2>변경 기록</h2>
+              <input id="audit-search" class="search-input" type="search" placeholder="기록 검색" />
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>시간</th>
+                    <th>작업</th>
+                    <th>대상</th>
+                    <th>사유</th>
+                    <th>이전</th>
+                    <th>이후</th>
+                  </tr>
+                </thead>
+                <tbody id="audit-table"></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+      </main>
+    </div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

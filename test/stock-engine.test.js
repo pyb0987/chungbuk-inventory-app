@@ -1,0 +1,92 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {
+  Buckets,
+  TransactionTypes,
+  applyTransaction,
+  normalizeTransactionType,
+  stockKey,
+  totalForItem
+} from "../src/domain/stock-engine.js";
+
+test("개인 출고 moves stock from part room to selected person", () => {
+  const stock = new Map([[stockKey(1, Buckets.PART_ROOM), 3]]);
+
+  const next = applyTransaction(stock, {
+    type: TransactionTypes.PERSONAL_OUT,
+    itemId: 1,
+    personId: 10,
+    quantity: 2
+  });
+
+  assert.equal(next.get(stockKey(1, Buckets.PART_ROOM)), 1);
+  assert.equal(next.get(stockKey(1, Buckets.PERSON, 10)), 2);
+  assert.equal(totalForItem(next, 1), 3);
+});
+
+test("개인 입고 moves stock from selected person back to part room", () => {
+  const stock = new Map([
+    [stockKey(1, Buckets.PART_ROOM), 1],
+    [stockKey(1, Buckets.PERSON, 10), 2]
+  ]);
+
+  const next = applyTransaction(stock, {
+    type: "입고",
+    itemId: 1,
+    personId: 10,
+    quantity: 1
+  });
+
+  assert.equal(next.get(stockKey(1, Buckets.PART_ROOM)), 2);
+  assert.equal(next.get(stockKey(1, Buckets.PERSON, 10)), 1);
+});
+
+test("서울로 반납 decreases part-room stock", () => {
+  const stock = new Map([[stockKey(1, Buckets.PART_ROOM), 5]]);
+
+  const next = applyTransaction(stock, {
+    type: "서울로 반납",
+    itemId: 1,
+    quantity: 3
+  });
+
+  assert.equal(next.get(stockKey(1, Buckets.PART_ROOM)), 2);
+  assert.equal(totalForItem(next, 1), 2);
+});
+
+test("서울에서 파트실로 택배 and 서울 입고 increase part-room stock", () => {
+  const stock = new Map([[stockKey(1, Buckets.PART_ROOM), 1]]);
+
+  const next = applyTransaction(stock, {
+    type: "서울 입고",
+    itemId: 1,
+    quantity: 4
+  });
+
+  assert.equal(next.get(stockKey(1, Buckets.PART_ROOM)), 5);
+  assert.equal(totalForItem(next, 1), 5);
+});
+
+test("negative internal stock is blocked", () => {
+  const stock = new Map([[stockKey(1, Buckets.PART_ROOM), 1]]);
+
+  assert.throws(
+    () =>
+      applyTransaction(stock, {
+        type: TransactionTypes.PERSONAL_OUT,
+        itemId: 1,
+        personId: 10,
+        quantity: 2
+      }),
+    /negative stock is not allowed/
+  );
+});
+
+test("legacy labels normalize to confirmed transaction types", () => {
+  assert.equal(normalizeTransactionType("반납"), TransactionTypes.RETURN_TO_SEOUL);
+  assert.equal(
+    normalizeTransactionType("서울_파트실_택배"),
+    TransactionTypes.SEOUL_TO_PART_ROOM
+  );
+  assert.equal(normalizeTransactionType("서울 입고"), TransactionTypes.SEOUL_TO_PART_ROOM);
+});
