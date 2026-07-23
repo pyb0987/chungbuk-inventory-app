@@ -1,6 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { resolve } from "node:path";
 import { schemaSql } from "./schema.js";
+import { assertDatabaseSchema } from "./schema-contract.js";
 
 const transactionDepth = new WeakMap();
 const transactionCounter = new WeakMap();
@@ -30,6 +31,12 @@ function migrateDatabase(db) {
     );
   }
   if (version === 0) {
+    const existingTables = db
+      .prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table'")
+      .get().count;
+    if (existingTables > 0) {
+      assertDatabaseSchema(db);
+    }
     db.exec("BEGIN IMMEDIATE");
     try {
       db.exec(schemaSql);
@@ -43,6 +50,7 @@ function migrateDatabase(db) {
   }
   // Keep idempotent indexes available while ordered migrations are added here.
   db.exec(schemaSql);
+  assertDatabaseSchema(db);
 }
 
 export function closeDatabase(db) {

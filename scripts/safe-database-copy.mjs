@@ -1,13 +1,19 @@
 import { backup as sqliteBackup, DatabaseSync } from "node:sqlite";
 import { existsSync, mkdirSync, renameSync, rmSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { validateAppDatabaseFile } from "../src/services/backups.js";
 
 const [operation, sourceArg, targetArg] = process.argv.slice(2);
-if (!["migrate", "backup"].includes(operation) || !sourceArg || !targetArg) {
-  throw new Error("usage: safe-database-copy.mjs <migrate|backup> <source> <target>");
+if (!["migrate", "backup", "validate"].includes(operation) || !sourceArg) {
+  throw new Error("usage: safe-database-copy.mjs <migrate|backup|validate> <source> [target]");
 }
 
 const source = resolve(sourceArg);
+if (operation === "validate") {
+  validateAppDatabaseFile(source);
+  process.exit(0);
+}
+if (!targetArg) throw new Error("target is required");
 const target = resolve(targetArg);
 if (!existsSync(source)) process.exit(operation === "migrate" ? 2 : 0);
 if (operation === "migrate" && existsSync(target)) {
@@ -34,19 +40,5 @@ try {
 }
 
 function validateDatabase(path) {
-  const db = new DatabaseSync(path, { readOnly: true });
-  try {
-    const integrity = Object.values(db.prepare("PRAGMA integrity_check").get())[0];
-    if (integrity !== "ok") throw new Error(`SQLite integrity check failed: ${integrity}`);
-    const required = new Set(["items", "people", "transactions", "audit_log"]);
-    for (const row of db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all()) {
-      required.delete(row.name);
-    }
-    if (required.size) throw new Error(`database is missing tables: ${[...required].join(", ")}`);
-    if (db.prepare("PRAGMA foreign_key_check").all().length) {
-      throw new Error("database has foreign-key violations");
-    }
-  } finally {
-    db.close();
-  }
+  validateAppDatabaseFile(path);
 }

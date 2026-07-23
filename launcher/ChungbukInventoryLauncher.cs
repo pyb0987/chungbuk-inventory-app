@@ -27,10 +27,11 @@ internal static class ChungbukInventoryLauncher
         ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
 
         string appRoot = AppDomain.CurrentDomain.BaseDirectory;
-        if (Environment.GetCommandLineArgs().Length > 1 &&
-            Environment.GetCommandLineArgs()[1] == "--health-check")
+        string[] commandLine = Environment.GetCommandLineArgs();
+        if (commandLine.Length > 1 && commandLine[1] == "--health-check")
         {
-            Environment.Exit(ValidatePackageRoot(appRoot, ReadCurrentVersion(appRoot)) ? 0 : 1);
+            string expected = commandLine.Length > 2 ? commandLine[2] : "";
+            Environment.Exit(ValidatePackageRoot(appRoot, expected) ? 0 : 1);
         }
         bool createdNew;
         instanceMutex = new Mutex(true, "Local\\ChungbukInventoryLauncher", out createdNew);
@@ -104,7 +105,23 @@ internal static class ChungbukInventoryLauncher
         string legacyDatabase = Path.Combine(legacyDir, "chungbuk-inventory.sqlite");
 
         Directory.CreateDirectory(dataDir);
-        if (!File.Exists(targetDatabase) && File.Exists(legacyDatabase))
+        if (File.Exists(targetDatabase))
+        {
+            if (RunDatabaseValidation(nodePath, appRoot, targetDatabase))
+            {
+                return;
+            }
+            if (!File.Exists(legacyDatabase) ||
+                !RunDatabaseValidation(nodePath, appRoot, legacyDatabase))
+            {
+                throw new InvalidDataException(
+                    "현재 데이터베이스가 손상되었고 복구 가능한 이전 데이터베이스도 없습니다: " +
+                    targetDatabase);
+            }
+            string quarantined = targetDatabase + ".invalid-" + DateTime.Now.ToString("yyyyMMdd-HHmmss");
+            File.Move(targetDatabase, quarantined);
+        }
+        if (File.Exists(legacyDatabase))
         {
             RunDatabaseCopy(nodePath, appRoot, "migrate", legacyDatabase, targetDatabase);
             MessageBox.Show(
@@ -112,6 +129,25 @@ internal static class ChungbukInventoryLauncher
                 "충북 재고관리",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
+        }
+    }
+
+    private static bool RunDatabaseValidation(
+        string nodePath,
+        string appRoot,
+        string databasePath)
+    {
+        string helper = Path.Combine(appRoot, "scripts", "safe-database-copy.mjs");
+        ProcessStartInfo info = new ProcessStartInfo();
+        info.FileName = nodePath;
+        info.Arguments = Quote(helper) + " validate " + Quote(databasePath);
+        info.WorkingDirectory = appRoot;
+        info.UseShellExecute = false;
+        info.CreateNoWindow = true;
+        using (Process process = Process.Start(info))
+        {
+            process.WaitForExit();
+            return process.ExitCode == 0;
         }
     }
 
@@ -187,6 +223,7 @@ internal static class ChungbukInventoryLauncher
         }
 
         Match tag = Regex.Match(json, "\"tag_name\"\\s*:\\s*\"v?([^\"]+)\"");
+        Match immutable = Regex.Match(json, "\"immutable\"\\s*:\\s*true", RegexOptions.IgnoreCase);
         Match asset = Regex.Match(
             json,
             "\"browser_download_url\"\\s*:\\s*\"([^\"]*chungbuk-inventory-portable-release\\.zip)\"",
@@ -195,7 +232,7 @@ internal static class ChungbukInventoryLauncher
             json,
             "\"browser_download_url\"\\s*:\\s*\"([^\"]*release-manifest\\.json)\"",
             RegexOptions.IgnoreCase);
-        if (!tag.Success || !asset.Success || !manifestAsset.Success)
+        if (!tag.Success || !immutable.Success || !asset.Success || !manifestAsset.Success)
         {
             return null;
         }
@@ -331,11 +368,31 @@ internal static class ChungbukInventoryLauncher
 
     private static bool ValidatePackageRoot(string root, string expectedVersion)
     {
-        return File.Exists(Path.Combine(root, "ChungbukInventory.exe")) &&
+        bool filesValid = !String.IsNullOrEmpty(expectedVersion) &&
+            File.Exists(Path.Combine(root, "ChungbukInventory.exe")) &&
             File.Exists(Path.Combine(root, "runtime", "node", "node.exe")) &&
             File.Exists(Path.Combine(root, "scripts", "start-portable.mjs")) &&
             File.Exists(Path.Combine(root, "scripts", "apply-windows-update.ps1")) &&
             ReadCurrentVersion(root) == expectedVersion;
+        if (!filesValid)
+        {
+            return false;
+        }
+        ProcessStartInfo info = new ProcessStartInfo();
+        info.FileName = Path.Combine(root, "runtime", "node", "node.exe");
+        info.Arguments = Quote(Path.Combine(root, "scripts", "health-check-portable.mjs"));
+        info.WorkingDirectory = root;
+        info.UseShellExecute = false;
+        info.CreateNoWindow = true;
+        using (Process health = Process.Start(info))
+        {
+            if (!health.WaitForExit(15000))
+            {
+                health.Kill();
+                return false;
+            }
+            return health.ExitCode == 0;
+        }
     }
 
     private sealed class ReleaseInfo

@@ -4,6 +4,11 @@ chcp 65001 >nul
 
 cd /d "%~dp0"
 
+if exist "%~dp0ChungbukInventory.exe" (
+  start "" "%~dp0ChungbukInventory.exe"
+  exit /b 0
+)
+
 if "%PORT%"=="" set "PORT=5177"
 set "LEGACY_DATA_DIR=%~dp0user-data"
 set "CHUNGBUK_DATA_DIR=%LOCALAPPDATA%\ChungbukInventory"
@@ -30,6 +35,24 @@ if errorlevel 1 (
   echo.
   pause
   exit /b 1
+)
+
+if exist "%CHUNGBUK_DATA_DIR%\chungbuk-inventory.sqlite" (
+  "%NODE_EXE%" "%~dp0scripts\safe-database-copy.mjs" validate "%CHUNGBUK_DATA_DIR%\chungbuk-inventory.sqlite"
+  if errorlevel 1 (
+    if not exist "%LEGACY_DATA_DIR%\chungbuk-inventory.sqlite" (
+      echo 오류: 현재 데이터베이스가 손상되었고 복구할 이전 데이터베이스가 없습니다.
+      pause
+      exit /b 1
+    )
+    "%NODE_EXE%" "%~dp0scripts\safe-database-copy.mjs" validate "%LEGACY_DATA_DIR%\chungbuk-inventory.sqlite"
+    if errorlevel 1 (
+      echo 오류: 현재 데이터베이스와 이전 데이터베이스를 모두 검증하지 못했습니다.
+      pause
+      exit /b 1
+    )
+    move "%CHUNGBUK_DATA_DIR%\chungbuk-inventory.sqlite" "%CHUNGBUK_DATA_DIR%\chungbuk-inventory.sqlite.invalid" >nul
+  )
 )
 
 if not exist "%CHUNGBUK_DATA_DIR%\chungbuk-inventory.sqlite" if exist "%LEGACY_DATA_DIR%\chungbuk-inventory.sqlite" (

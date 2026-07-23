@@ -66,6 +66,7 @@ function validatePortableFolder(root) {
   expectFile(root, "scripts/start-portable.mjs");
   expectFile(root, "scripts/apply-windows-update.ps1");
   expectFile(root, "scripts/safe-database-copy.mjs");
+  expectFile(root, "scripts/health-check-portable.mjs");
   expectFile(root, "scripts/verify-release-version.mjs");
   expectFile(root, "scripts/verify-portable-runtime.mjs");
   expectDirectory(root, "user-data/backups");
@@ -124,6 +125,7 @@ function validatePortableZip(zipPath) {
   expectZipEntry(entrySet, "scripts/start-portable.mjs");
   expectZipEntry(entrySet, "scripts/apply-windows-update.ps1");
   expectZipEntry(entrySet, "scripts/safe-database-copy.mjs");
+  expectZipEntry(entrySet, "scripts/health-check-portable.mjs");
   expectZipEntry(entrySet, "scripts/verify-release-version.mjs");
   expectZipEntry(entrySet, "scripts/verify-portable-runtime.mjs");
   expectZipEntry(entrySet, "user-data/backups/");

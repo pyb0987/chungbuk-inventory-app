@@ -6,7 +6,8 @@ import {
   createBackupRecord,
   listBackupRecords
 } from "../db/repositories.js";
-import { isDatabasePathOpen } from "../db/database.js";
+import { CURRENT_SCHEMA_VERSION, isDatabasePathOpen } from "../db/database.js";
+import { assertDatabaseSchema } from "../db/schema-contract.js";
 import { assertValidStock, Buckets, TransactionTypes } from "../domain/stock-engine.js";
 
 export async function createDatabaseBackup(db, options) {
@@ -108,25 +109,10 @@ export function validateAppDatabaseFile(filePath) {
   validateSqliteFile(filePath);
   const db = new DatabaseSync(filePath, { readOnly: true });
   try {
-    const requiredTables = [
-      "items",
-      "people",
-      "transactions",
-      "stock_adjustments",
-      "serial_numbers",
-      "audit_log",
-      "backups",
-      "import_runs"
-    ];
-    const existing = new Set(
-      db
-        .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
-        .all()
-        .map((row) => row.name)
-    );
-    const missing = requiredTables.filter((table) => !existing.has(table));
-    if (missing.length > 0) {
-      throw new Error(`backup is missing app tables: ${missing.join(", ")}`);
+    assertDatabaseSchema(db);
+    const version = db.prepare("PRAGMA user_version").get().user_version;
+    if (version > CURRENT_SCHEMA_VERSION) {
+      throw new Error(`backup schema ${version} is newer than supported ${CURRENT_SCHEMA_VERSION}`);
     }
     validateForeignKeys(db);
     validatePersistedStockRows(db);

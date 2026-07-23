@@ -12,6 +12,7 @@ $parent = [IO.Directory]::GetParent($appRootPath).FullName
 $token = [Guid]::NewGuid().ToString("N")
 $stageRoot = Join-Path $parent ("ChungbukInventory-stage-" + $token)
 $previousRoot = Join-Path $parent ("ChungbukInventory-previous-" + $token)
+$failedRoot = Join-Path $parent ("ChungbukInventory-failed-" + $token)
 $swapped = $false
 $failed = $false
 
@@ -23,7 +24,8 @@ function Assert-Package([string]$Root, [string]$Version) {
     "runtime\node\node.exe",
     "scripts\start-portable.mjs",
     "scripts\apply-windows-update.ps1",
-    "scripts\safe-database-copy.mjs"
+    "scripts\safe-database-copy.mjs",
+    "scripts\health-check-portable.mjs"
   )
   foreach ($relative in $required) {
     if (-not (Test-Path -LiteralPath (Join-Path $Root $relative) -PathType Leaf)) {
@@ -34,6 +36,20 @@ function Assert-Package([string]$Root, [string]$Version) {
   if ($actualVersion -ne $Version) {
     throw "업데이트 버전이 일치하지 않습니다: expected=$Version actual=$actualVersion"
   }
+}
+
+function Move-DirectoryWithRetry([string]$Source, [string]$Destination) {
+  $lastError = $null
+  for ($attempt = 1; $attempt -le 5; $attempt++) {
+    try {
+      [IO.Directory]::Move($Source, $Destination)
+      return
+    } catch {
+      $lastError = $_
+      Start-Sleep -Milliseconds (250 * $attempt)
+    }
+  }
+  throw $lastError
 }
 
 try {
@@ -47,18 +63,18 @@ try {
   Remove-Item -LiteralPath $writeProbe -Force
 
   Wait-Process -Id $LauncherPid -ErrorAction SilentlyContinue
-  [IO.Directory]::Move($appRootPath, $previousRoot)
+  Move-DirectoryWithRetry $appRootPath $previousRoot
   try {
-    [IO.Directory]::Move($stageRoot, $appRootPath)
+    Move-DirectoryWithRetry $stageRoot $appRootPath
     $swapped = $true
   } catch {
-    [IO.Directory]::Move($previousRoot, $appRootPath)
+    Move-DirectoryWithRetry $previousRoot $appRootPath
     throw
   }
 
   $health = Start-Process `
     -FilePath (Join-Path $appRootPath "ChungbukInventory.exe") `
-    -ArgumentList "--health-check" `
+    -ArgumentList @("--health-check", $ExpectedVersion) `
     -Wait `
     -PassThru
   if ($health.ExitCode -ne 0) {
@@ -68,14 +84,26 @@ try {
   if (-not $NoRestart) {
     Start-Process (Join-Path $appRootPath "ChungbukInventory.exe")
   }
-  Remove-Item -LiteralPath $previousRoot -Recurse -Force
+  Remove-Item -LiteralPath $previousRoot -Recurse -Force -ErrorAction SilentlyContinue
   $previousRoot = $null
 } catch {
   $failed = $true
   if ($swapped -and $previousRoot -and (Test-Path -LiteralPath $previousRoot)) {
-    Remove-Item -LiteralPath $appRootPath -Recurse -Force -ErrorAction SilentlyContinue
-    [IO.Directory]::Move($previousRoot, $appRootPath)
-    $previousRoot = $null
+    try {
+      if (Test-Path -LiteralPath $appRootPath) {
+        Move-DirectoryWithRetry $appRootPath $failedRoot
+      }
+      Move-DirectoryWithRetry $previousRoot $appRootPath
+      $previousRoot = $null
+    } catch {
+      $recoveryNote = Join-Path $parent "ChungbukInventory-RECOVERY.txt"
+      @(
+        "자동 복구에 실패했습니다.",
+        "정상 이전 버전: $previousRoot",
+        "실패한 새 버전: $failedRoot",
+        "이전 버전의 ChungbukInventory.exe를 실행해 주세요."
+      ) | Set-Content -LiteralPath $recoveryNote -Encoding utf8
+    }
   }
   if ($NoRestart) {
     Write-Error "업데이트를 적용하지 못해 이전 버전을 유지했습니다: $($_.Exception.Message)"
@@ -88,8 +116,15 @@ try {
       "Error"
     ) | Out-Null
   }
-  if (-not $NoRestart -and (Test-Path -LiteralPath (Join-Path $appRootPath "ChungbukInventory.exe"))) {
-    Start-Process (Join-Path $appRootPath "ChungbukInventory.exe")
+  if (-not $NoRestart) {
+    $recoveryExe = if (Test-Path -LiteralPath (Join-Path $appRootPath "ChungbukInventory.exe")) {
+      Join-Path $appRootPath "ChungbukInventory.exe"
+    } elseif ($previousRoot -and (Test-Path -LiteralPath (Join-Path $previousRoot "ChungbukInventory.exe"))) {
+      Join-Path $previousRoot "ChungbukInventory.exe"
+    }
+    if ($recoveryExe) {
+      Start-Process $recoveryExe
+    }
   }
 } finally {
   if (Test-Path -LiteralPath $stageRoot) {

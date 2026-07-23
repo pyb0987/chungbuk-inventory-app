@@ -2,6 +2,9 @@ name: Build Windows portable app
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
+  artifact-metadata: write
 
 on:
   workflow_dispatch:
@@ -72,8 +75,9 @@ jobs:
         run: |
           Copy-Item dist/release-check dist/update-test-install -Recurse
           Set-Content dist/update-test-install/APP_VERSION "0.2.0" -Encoding ascii
-          New-Item -ItemType Directory -Force dist/fake-local-data | Out-Null
-          Set-Content dist/fake-local-data/preserved.txt "inventory-data" -Encoding ascii
+          $actualDataDir = Join-Path $env:LOCALAPPDATA "ChungbukInventory"
+          New-Item -ItemType Directory -Force $actualDataDir | Out-Null
+          Set-Content (Join-Path $actualDataDir "preserved.txt") "inventory-data" -Encoding ascii
           Copy-Item dist/chungbuk-inventory-portable-release.zip dist/update-test.zip
           ./scripts/apply-windows-update.ps1 `
             -LauncherPid 999999 `
@@ -82,21 +86,21 @@ jobs:
             -ExpectedVersion ((Get-Content APP_VERSION -Raw).Trim()) `
             -NoRestart
           node scripts/verify-release-version.mjs dist/update-test-install ((Get-Content APP_VERSION -Raw).Trim())
-          if ((Get-Content dist/fake-local-data/preserved.txt -Raw).Trim() -ne "inventory-data") {
+          if ((Get-Content (Join-Path $actualDataDir "preserved.txt") -Raw).Trim() -ne "inventory-data") {
             throw "External user data was changed"
           }
 
           Copy-Item dist/release-check dist/rollback-test-install -Recurse
           Set-Content dist/rollback-test-install/APP_VERSION "0.2.0" -Encoding ascii
-          New-Item -ItemType Directory -Force dist/malformed | Out-Null
-          Set-Content dist/malformed/APP_VERSION ((Get-Content APP_VERSION -Raw).Trim()) -Encoding ascii
-          Compress-Archive dist/malformed/* dist/malformed.zip
+          Copy-Item dist/release-check dist/broken-after-swap -Recurse
+          Remove-Item dist/broken-after-swap/src/app/server.js
+          Compress-Archive dist/broken-after-swap/* dist/broken-after-swap.zip
           $negative = Start-Process pwsh `
             -ArgumentList @(
               "-NoProfile",
               "-File", "./scripts/apply-windows-update.ps1",
               "-LauncherPid", "999999",
-              "-ArchivePath", "dist/malformed.zip",
+              "-ArchivePath", "dist/broken-after-swap.zip",
               "-AppRoot", "dist/rollback-test-install",
               "-ExpectedVersion", ((Get-Content APP_VERSION -Raw).Trim()),
               "-NoRestart"
@@ -106,6 +110,16 @@ jobs:
           if ((Get-Content dist/rollback-test-install/APP_VERSION -Raw).Trim() -ne "0.2.0") {
             throw "Rollback did not preserve previous installation"
           }
+          if (Test-Path dist/rollback-test-install/src/app/server.js -PathType Leaf) {
+            Write-Host "Post-swap health failure restored the complete previous installation"
+          } else {
+            throw "Rollback restored an incomplete installation"
+          }
+
+      - name: Attest Windows package provenance
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: dist/chungbuk-inventory-portable-release.zip
 
       - uses: actions/upload-artifact@v4
         with:
@@ -122,8 +136,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create $env:GITHUB_REF_NAME `
-            "dist/chungbuk-inventory-portable-release.zip" `
-            "dist/release-manifest.json" `
             --repo $env:GITHUB_REPOSITORY `
             --title "Chungbuk Inventory $env:GITHUB_REF_NAME" `
-            --generate-notes
+            --generate-notes `
+            --draft
+          gh release upload $env:GITHUB_REF_NAME `
+            "dist/chungbuk-inventory-portable-release.zip" `
+            "dist/release-manifest.json" `
+            --repo $env:GITHUB_REPOSITORY
+          gh release edit $env:GITHUB_REF_NAME `
+            --repo $env:GITHUB_REPOSITORY `
+            --draft=false

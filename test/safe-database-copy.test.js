@@ -49,3 +49,27 @@ test("database initialization records and rejects unsupported schema versions", 
   }, /newer than supported/);
   newer.close();
 });
+
+test("safe database validation rejects incomplete and malformed schemas", () => {
+  const directory = mkdtempSync(join(tmpdir(), "chungbuk-incomplete-"));
+  const incomplete = join(directory, "incomplete.sqlite");
+  const db = new DatabaseSync(incomplete);
+  db.exec(`
+    CREATE TABLE items (id INTEGER PRIMARY KEY);
+    CREATE TABLE people (id INTEGER PRIMARY KEY);
+    CREATE TABLE transactions (id INTEGER PRIMARY KEY);
+    CREATE TABLE audit_log (id INTEGER PRIMARY KEY);
+  `);
+  db.close();
+
+  assert.throws(
+    () =>
+      execFileSync(process.execPath, [
+        join(process.cwd(), "scripts", "safe-database-copy.mjs"),
+        "validate",
+        incomplete
+      ]),
+    /missing/
+  );
+  assert.throws(() => createAppDatabase(incomplete), /missing columns/);
+});
