@@ -229,6 +229,7 @@ function actionLabel(action) {
     create: "생성",
     update: "수정",
     delete: "삭제",
+    permanent_delete: "영구 삭제",
     restore: "복원"
   }[action] ?? action;
 }

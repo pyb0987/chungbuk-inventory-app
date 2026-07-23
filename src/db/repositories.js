@@ -68,6 +68,31 @@ export function setItemActive(db, id, isActive, { reason = null } = {}) {
   });
 }
 
+export function permanentlyDeleteItem(db, id, { reason = null } = {}) {
+  return withTransaction(db, () => {
+    const before = getItem(db, id);
+    for (const [table, column] of [
+      ["transactions", "item_id"],
+      ["stock_adjustments", "item_id"],
+      ["serial_numbers", "item_id"]
+    ]) {
+      const row = db.prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE ${column} = ?`).get(id);
+      if (row.count > 0) {
+        throw new Error("기록이나 재고가 연결된 품목은 영구 삭제할 수 없습니다. 대신 비활성화해 주세요.");
+      }
+    }
+    db.prepare("DELETE FROM items WHERE id = ?").run(id);
+    writeAudit(db, {
+      action: "permanent_delete",
+      entityType: "item",
+      entityId: id,
+      before,
+      reason
+    });
+    return before;
+  });
+}
+
 export function createPerson(db, { name }) {
   const cleanName = requireText(name, "person name");
   const existing = findPersonByName(db, cleanName);

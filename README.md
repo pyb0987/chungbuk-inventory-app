@@ -106,7 +106,11 @@ Windows 전달 전에는 Windows용 Node 런타임이 아래 위치에 있어야
 runtime/node/node.exe
 ```
 
-Windows 컴퓨터에서 실행 파일을 다시 만들 때는 한 번만 아래 파일을 실행합니다.
+GitHub의 `Build Windows portable app` 작업을 실행하면 Windows용 Node 런타임과
+`ChungbukInventory.exe`가 이미 포함된 zip 파일을 받을 수 있습니다. 사용자는 압축을
+풀고 exe만 실행하면 되며, 별도 빌드가 필요하지 않습니다.
+
+개발자가 Windows 컴퓨터에서 실행 파일을 직접 다시 만들 때는 아래 파일을 실행합니다.
 
 ```text
 BUILD_WINDOWS_LAUNCHER.cmd

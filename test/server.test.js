@@ -19,7 +19,7 @@ test("local app server serves UI state and records a transaction", async () => {
     assert.equal(initial.inventory.rows.length, 0);
     assert.deepEqual(
       initial.transactionTypes.map((entry) => entry.label),
-      ["개인 출고", "개인 입고", "서울로 반납", "서울에서 파트실로 택배", "사무실 사용/보유"]
+      ["개인 출고", "개인 입고", "서울로 반납", "서울에서 파트실로 택배", "사무실 사용/보유", "사무실 입고"]
     );
 
     const imported = await postJson(`${app.url}/api/import/current-stock`, {

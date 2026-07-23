@@ -16,7 +16,8 @@ const movementText = {
   personal_in: "개인 - / 파트실 +",
   return_to_seoul: "파트실 - / 서울",
   seoul_to_part_room: "서울 / 파트실 +",
-  office_out: "파트실 - / 사무실 +"
+  office_out: "파트실 - / 사무실 +",
+  office_in: "사무실 - / 파트실 +"
 };
 
 const needsPerson = new Set(["personal_in", "personal_out"]);
@@ -51,6 +52,8 @@ const elements = {
   backupTable: document.querySelector("#backup-table"),
   auditTable: document.querySelector("#audit-table"),
   auditSearch: document.querySelector("#audit-search"),
+  auditFrom: document.querySelector("#audit-from"),
+  auditTo: document.querySelector("#audit-to"),
   movementPreview: document.querySelector("#movement-preview"),
   adjustmentPreview: document.querySelector("#adjustment-preview"),
   inventorySearch: document.querySelector("#inventory-search"),
@@ -100,6 +103,8 @@ function setupForms() {
   elements.auditSearch.addEventListener("input", () => {
     renderAuditLog();
   });
+  elements.auditFrom.addEventListener("change", renderAuditLog);
+  elements.auditTo.addEventListener("change", renderAuditLog);
 
   elements.transactionForm.type.addEventListener("change", updateTransactionFormState);
   elements.transactionForm.itemSearch.addEventListener("input", (event) => {
@@ -156,7 +161,6 @@ function setupForms() {
         itemId: form.get("itemId"),
         personId: form.get("personId"),
         quantity: form.get("quantity"),
-        serialText: form.get("serialText"),
         note: form.get("note")
       };
       if (editingId) {
@@ -622,6 +626,7 @@ function renderTransactionControls() {
   elements.transactionForm.personId.innerHTML = selectablePeople(elements.transactionForm.personId.value)
     .map((person) => `<option value="${person.id}">${escapeHtml(person.name)}</option>`)
     .join("");
+  elements.transactionForm.personId.insertAdjacentHTML("afterbegin", '<option value="">개인을 선택하세요</option>');
   updateTransactionFormState();
   renderTransactionEditMode();
 }
@@ -757,7 +762,10 @@ function renderMasterDataTables() {
 function renderMasterDataRow(record, kind) {
   const active = Boolean(record.isActive);
   const action = active
-    ? `<button class="danger-button" type="button" data-deactivate-${kind}="${record.id}">비활성화</button>`
+    ? `<div class="action-group">
+        <button class="danger-button" type="button" data-deactivate-${kind}="${record.id}">비활성화</button>
+        ${kind === "item" ? `<button class="danger-button" type="button" data-permanent-delete-item="${record.id}">영구 삭제</button>` : ""}
+      </div>`
     : `<button class="secondary-button" type="button" data-activate-${kind}="${record.id}">복원</button>`;
   return `
     <tr class="${active ? "" : "deleted"}">
@@ -770,7 +778,7 @@ function renderMasterDataRow(record, kind) {
 function renderTransactions() {
   const term = state.transactionSearch;
   const rows = state.data.transactions.filter((row) => {
-    const text = searchKey([row.date, row.label, row.itemName, row.personName, row.serialText, row.note].join(" "));
+    const text = searchKey([row.date, row.label, row.itemName, row.personName, row.note].join(" "));
     return text.includes(term);
   });
 
@@ -784,14 +792,13 @@ function renderTransactions() {
               <td>${escapeHtml(row.itemName)}</td>
               <td>${escapeHtml(row.personName)}</td>
               <td class="number">${formatNumber(row.quantity)}</td>
-              <td>${escapeHtml(row.serialText ?? "")}</td>
               <td>${escapeHtml(row.note ?? "")}</td>
               <td>${renderTransactionStatus(row)}</td>
               <td>${renderTransactionActions(row)}</td>
             </tr>`
         )
         .join("")
-    : emptyRow(9, "입출고 기록 없음");
+    : emptyRow(8, "입출고 기록 없음");
 }
 
 function renderTransactionStatus(row) {
@@ -867,16 +874,21 @@ function renderSerialActions(row) {
 
 function renderAuditLog() {
   const term = searchKey(elements.auditSearch.value);
-  const rows = state.data.auditLog.filter((row) =>
-    searchKey([
+  const from = elements.auditFrom.value;
+  const to = elements.auditTo.value;
+  const rows = state.data.auditLog.filter((row) => {
+    const date = row.createdAt.slice(0, 10);
+    return (!from || date >= from) &&
+      (!to || date <= to) &&
+      searchKey([
       row.createdAt,
       row.actionLabel,
       row.entityLabel,
       formatReason(row.reason),
       row.beforeSummary,
       row.afterSummary
-    ].join(" ")).includes(term)
-  );
+      ].join(" ")).includes(term);
+  });
 
   elements.auditTable.innerHTML = rows.length
     ? rows
@@ -995,6 +1007,22 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
+  const permanentDeleteItemButton = event.target.closest("[data-permanent-delete-item]");
+  if (permanentDeleteItemButton) {
+    const confirmed = window.confirm("이 품목을 영구 삭제할까요? 연결된 재고나 기록이 있으면 삭제되지 않습니다.");
+    if (!confirmed) {
+      return;
+    }
+    await runUiAction(async () => {
+      await apiRequest(`/api/items/${permanentDeleteItemButton.dataset.permanentDeleteItem}`, {
+        method: "DELETE",
+        body: { permanent: true, reason: "화면에서 품목 영구 삭제" }
+      });
+      setStatus("품목 영구 삭제됨");
+    });
+    return;
+  }
+
   await handleMasterDataAction(event, "item", "품목");
   await handleMasterDataAction(event, "person", "개인");
 });
@@ -1074,7 +1102,6 @@ function enterTransactionEditMode(id) {
   elements.transactionForm.itemSearch.value = transaction.itemName;
   elements.transactionForm.personId.value = transaction.personId ? String(transaction.personId) : "";
   elements.transactionForm.quantity.value = transaction.quantity;
-  elements.transactionForm.serialText.value = transaction.serialText ?? "";
   elements.transactionForm.note.value = transaction.note ?? "";
   renderTransactionControls();
   elements.transactionForm.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1127,19 +1154,17 @@ function renderSerialEditMode() {
 
 function resetTransactionFormFields() {
   elements.transactionForm.quantity.value = "";
-  elements.transactionForm.serialText.value = "";
   elements.transactionForm.note.value = "";
 }
 
 function resetTransactionFormForNewEntry() {
   const defaultType = state.data?.transactionTypes?.[0]?.type ?? "personal_out";
-  const defaultPerson = state.data?.activePeople?.[0];
   state.itemSearch = "";
   elements.transactionForm.occurredOn.value = localIsoDate(new Date());
   elements.transactionForm.type.value = defaultType;
   elements.transactionForm.itemSearch.value = "";
   elements.transactionForm.itemId.value = "";
-  elements.transactionForm.personId.value = defaultPerson ? String(defaultPerson.id) : "";
+  elements.transactionForm.personId.value = "";
   resetTransactionFormFields();
 }
 

@@ -11,6 +11,7 @@ export const TransactionTypes = Object.freeze({
   RETURN_TO_SEOUL: "return_to_seoul",
   SEOUL_TO_PART_ROOM: "seoul_to_part_room",
   OFFICE_OUT: "office_out",
+  OFFICE_IN: "office_in",
   ADJUSTMENT: "adjustment"
 });
 
@@ -20,6 +21,7 @@ export const TransactionLabels = Object.freeze({
   [TransactionTypes.RETURN_TO_SEOUL]: "서울로 반납",
   [TransactionTypes.SEOUL_TO_PART_ROOM]: "서울에서 파트실로 택배",
   [TransactionTypes.OFFICE_OUT]: "사무실 사용/보유",
+  [TransactionTypes.OFFICE_IN]: "사무실 입고",
   [TransactionTypes.ADJUSTMENT]: "재고 조정"
 });
 
@@ -35,7 +37,9 @@ export const LegacyAliases = Object.freeze({
   "서울에서 파트실로 택배": TransactionTypes.SEOUL_TO_PART_ROOM,
   "서울 입고": TransactionTypes.SEOUL_TO_PART_ROOM,
   "사무실 사용/보유": TransactionTypes.OFFICE_OUT,
-  "사무실": TransactionTypes.OFFICE_OUT
+  "사무실": TransactionTypes.OFFICE_OUT,
+  "사무실 출고": TransactionTypes.OFFICE_OUT,
+  "사무실 입고": TransactionTypes.OFFICE_IN
 });
 
 export function normalizeTransactionType(input) {
@@ -97,6 +101,12 @@ export function buildDeltas(transaction) {
       return [
         delta(Buckets.PART_ROOM, null, -quantity),
         delta(Buckets.OFFICE, null, quantity)
+      ];
+
+    case TransactionTypes.OFFICE_IN:
+      return [
+        delta(Buckets.OFFICE, null, -quantity),
+        delta(Buckets.PART_ROOM, null, quantity)
       ];
 
     default:

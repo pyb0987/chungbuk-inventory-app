@@ -145,10 +145,6 @@
                   수량
                   <input name="quantity" type="number" min="1" step="1" required />
                 </label>
-                <label>
-                  시리얼
-                  <input name="serialText" type="text" />
-                </label>
                 <label class="wide">
                   메모
                   <input name="note" type="text" />
@@ -218,7 +214,6 @@
                     <th>품목</th>
                     <th>개인</th>
                     <th>수량</th>
-                    <th>시리얼</th>
                     <th>메모</th>
                     <th>상태</th>
                     <th>작업</th>
@@ -433,7 +428,12 @@
           <section class="panel">
             <div class="section-header">
               <h2>변경 기록</h2>
-              <input id="audit-search" class="search-input" type="search" placeholder="기록 검색" />
+              <div class="audit-filters">
+                <input id="audit-from" type="date" aria-label="시작일" />
+                <span>~</span>
+                <input id="audit-to" type="date" aria-label="종료일" />
+                <input id="audit-search" class="search-input" type="search" placeholder="기록 검색" />
+              </div>
             </div>
             <div class="table-wrap">
               <table>

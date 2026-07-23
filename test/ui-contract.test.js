@@ -81,7 +81,7 @@ test("client UI keeps confirmed movement previews and Korean-safe search", () =>
     "setStatus(`오류: ${error.message}`)",
     "if (errorTarget)",
     "state.transactionSearch = searchKey(event.target.value)",
-    "const text = searchKey([row.date, row.label, row.itemName, row.personName, row.serialText, row.note].join(\" \"))",
+    "const text = searchKey([row.date, row.label, row.itemName, row.personName, row.note].join(\" \"))",
     "data-restore-transaction",
     "이 입출고 기록을 복원할까요?",
     "data-restore-serial",

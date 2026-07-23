@@ -67,6 +67,22 @@ test("서울에서 파트실로 택배 and 서울 입고 increase part-room stoc
   assert.equal(totalForItem(next, 1), 5);
 });
 
+test("사무실 입고 moves office stock back to the part room", () => {
+  const stock = new Map([
+    [stockKey(1, Buckets.PART_ROOM), 1],
+    [stockKey(1, Buckets.OFFICE), 3]
+  ]);
+
+  const next = applyTransaction(stock, {
+    type: TransactionTypes.OFFICE_IN,
+    itemId: 1,
+    quantity: 2
+  });
+
+  assert.equal(next.get(stockKey(1, Buckets.PART_ROOM)), 3);
+  assert.equal(next.get(stockKey(1, Buckets.OFFICE)), 1);
+});
+
 test("negative internal stock is blocked", () => {
   const stock = new Map([[stockKey(1, Buckets.PART_ROOM), 1]]);
 

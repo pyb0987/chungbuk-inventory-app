@@ -1,0 +1,43 @@
+name: Build Windows portable app
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "25"
+
+      - name: Install Windows Node runtime
+        shell: pwsh
+        run: |
+          $version = (node --version).TrimStart("v")
+          $zip = "node-v$version-win-x64.zip"
+          Invoke-WebRequest "https://nodejs.org/dist/v$version/$zip" -OutFile $zip
+          Expand-Archive $zip -DestinationPath runtime-downloads
+          New-Item -ItemType Directory -Force runtime/node | Out-Null
+          Copy-Item "runtime-downloads/node-v$version-win-x64/*" runtime/node -Recurse
+
+      - name: Build bundled launcher
+        shell: pwsh
+        run: ./scripts/build-windows-launcher.ps1
+
+      - name: Test
+        run: npm test
+
+      - name: Package self-contained app
+        run: npm run package:portable:release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ChungbukInventory-Windows
+          path: dist/chungbuk-inventory-portable-release.zip
+          if-no-files-found: error

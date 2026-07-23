@@ -14,6 +14,7 @@ import {
   getBackupRecord,
   listItems,
   listPeople,
+  permanentlyDeleteItem,
   recordTransaction,
   restoreSerialNumber,
   restoreTransaction,
@@ -177,7 +178,9 @@ async function handleApiRequest({ request, response, getDb, setDb, databasePath,
     const id = parseEntityId(url, "item");
     const input = await readOptionalJsonBody(request);
     await ensureDailyBackup(db, { backupDir });
-    const item = setItemActive(db, id, false, { reason: input.reason ?? "UI delete" });
+    const item = input.permanent
+      ? permanentlyDeleteItem(db, id, { reason: input.reason ?? "UI permanent delete" })
+      : setItemActive(db, id, false, { reason: input.reason ?? "UI delete" });
     sendJson(response, 200, { item, state: buildState(db) });
     return;
   }
@@ -450,7 +453,8 @@ function buildState(db) {
       TransactionTypes.PERSONAL_IN,
       TransactionTypes.RETURN_TO_SEOUL,
       TransactionTypes.SEOUL_TO_PART_ROOM,
-      TransactionTypes.OFFICE_OUT
+      TransactionTypes.OFFICE_OUT,
+      TransactionTypes.OFFICE_IN
     ].map((type) => ({
       type,
       label: entryLabelForTransactionType(type),
