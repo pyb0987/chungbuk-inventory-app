@@ -16,7 +16,7 @@ internal static class ChungbukInventoryLauncher
     private static Button openButton;
     private static Button stopButton;
     private static Label statusLabel;
-    private static Timer processTimer;
+    private static System.Windows.Forms.Timer processTimer;
     private static Mutex instanceMutex;
 
     [STAThread]
@@ -87,7 +87,7 @@ internal static class ChungbukInventoryLauncher
 
         using (Form form = BuildForm())
         {
-            processTimer = new Timer();
+            processTimer = new System.Windows.Forms.Timer();
             processTimer.Interval = 1000;
             processTimer.Tick += delegate { UpdateProcessStatus(); };
             processTimer.Start();
