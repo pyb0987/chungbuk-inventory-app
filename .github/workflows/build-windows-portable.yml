@@ -70,6 +70,18 @@ jobs:
             sha256 = $sha
           } | ConvertTo-Json | Set-Content dist/release-manifest.json -Encoding utf8
 
+      - name: Launch packaged EXE on Windows
+        shell: pwsh
+        run: |
+          $smoke = Start-Process `
+            -FilePath dist/release-check/ChungbukInventory.exe `
+            -ArgumentList "--smoke-test" `
+            -Wait `
+            -PassThru
+          if ($smoke.ExitCode -ne 0) {
+            throw "Packaged ChungbukInventory.exe did not reach /api/state"
+          }
+
       - name: Exercise transactional Windows updater
         shell: pwsh
         run: |

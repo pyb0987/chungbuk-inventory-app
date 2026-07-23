@@ -23,7 +23,9 @@ try {
   console.log(`충북 재고관리 앱이 실행 중입니다: ${app.url}`);
   console.log(`데이터베이스: ${app.databasePath}`);
   console.log("앱을 종료하려면 이 창을 닫거나 Ctrl+C를 누르세요.");
-  openBrowser(app.url);
+  if (process.env.CHUNGBUK_NO_BROWSER !== "1") {
+    openBrowser(app.url);
+  }
 } catch (error) {
   console.error("충북 재고관리 앱을 시작하지 못했습니다.");
   console.error(error.message ?? error);

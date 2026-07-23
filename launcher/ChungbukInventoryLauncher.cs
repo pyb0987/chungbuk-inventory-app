@@ -28,6 +28,10 @@ internal static class ChungbukInventoryLauncher
 
         string appRoot = AppDomain.CurrentDomain.BaseDirectory;
         string[] commandLine = Environment.GetCommandLineArgs();
+        if (commandLine.Length > 1 && commandLine[1] == "--smoke-test")
+        {
+            Environment.Exit(RunPackagedStartupSmokeTest(appRoot) ? 0 : 1);
+        }
         if (commandLine.Length > 1 && commandLine[1] == "--health-check")
         {
             string expected = commandLine.Length > 2 ? commandLine[2] : "";
@@ -95,6 +99,61 @@ internal static class ChungbukInventoryLauncher
 
             form.FormClosing += delegate { StopApp(); };
             Application.Run(form);
+        }
+    }
+
+    private static bool RunPackagedStartupSmokeTest(string appRoot)
+    {
+        string nodePath = Path.Combine(appRoot, "runtime", "node", "node.exe");
+        string scriptPath = Path.Combine(appRoot, "scripts", "start-portable.mjs");
+        string dataDir = Path.Combine(
+            Path.GetTempPath(),
+            "ChungbukInventory-smoke-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(dataDir);
+            StartApp(nodePath, scriptPath, appRoot, dataDir, false);
+            for (int attempt = 0; attempt < 60; attempt++)
+            {
+                if (appProcess == null || appProcess.HasExited)
+                {
+                    return false;
+                }
+                try
+                {
+                    HttpWebRequest request = (HttpWebRequest)WebRequest.Create(AppUrl + "api/state");
+                    request.Timeout = 1000;
+                    using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
+                    using (StreamReader reader = new StreamReader(response.GetResponseStream(), Encoding.UTF8))
+                    {
+                        string body = reader.ReadToEnd();
+                        if (response.StatusCode == HttpStatusCode.OK &&
+                            body.Contains("\"dashboard\"") &&
+                            body.Contains("\"items\""))
+                        {
+                            return true;
+                        }
+                    }
+                }
+                catch (WebException)
+                {
+                    // The packaged server may still be starting.
+                }
+                Thread.Sleep(500);
+            }
+            return false;
+        }
+        finally
+        {
+            StopApp();
+            try
+            {
+                Directory.Delete(dataDir, true);
+            }
+            catch
+            {
+                // The smoke test result is determined by startup readiness.
+            }
         }
     }
 
@@ -409,7 +468,12 @@ internal static class ChungbukInventoryLauncher
         }
     }
 
-    private static void StartApp(string nodePath, string scriptPath, string appRoot, string dataDir)
+    private static void StartApp(
+        string nodePath,
+        string scriptPath,
+        string appRoot,
+        string dataDir,
+        bool openBrowser = true)
     {
         ProcessStartInfo info = new ProcessStartInfo();
         info.FileName = nodePath;
@@ -419,6 +483,10 @@ internal static class ChungbukInventoryLauncher
         info.CreateNoWindow = true;
         info.WindowStyle = ProcessWindowStyle.Hidden;
         info.EnvironmentVariables["CHUNGBUK_DATA_DIR"] = dataDir;
+        if (!openBrowser)
+        {
+            info.EnvironmentVariables["CHUNGBUK_NO_BROWSER"] = "1";
+        }
 
         appProcess = Process.Start(info);
     }
