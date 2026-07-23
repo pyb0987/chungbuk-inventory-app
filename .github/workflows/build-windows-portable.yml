@@ -91,14 +91,18 @@ jobs:
           New-Item -ItemType Directory -Force dist/malformed | Out-Null
           Set-Content dist/malformed/APP_VERSION ((Get-Content APP_VERSION -Raw).Trim()) -Encoding ascii
           Compress-Archive dist/malformed/* dist/malformed.zip
-          & pwsh -NoProfile -File ./scripts/apply-windows-update.ps1 `
-            -LauncherPid 999999 `
-            -ArchivePath dist/malformed.zip `
-            -AppRoot dist/rollback-test-install `
-            -ExpectedVersion ((Get-Content APP_VERSION -Raw).Trim()) `
-            -NoRestart
-          $negativeExit = $LASTEXITCODE
-          if ($negativeExit -eq 0) { throw "Malformed update unexpectedly passed" }
+          $negative = Start-Process pwsh `
+            -ArgumentList @(
+              "-NoProfile",
+              "-File", "./scripts/apply-windows-update.ps1",
+              "-LauncherPid", "999999",
+              "-ArchivePath", "dist/malformed.zip",
+              "-AppRoot", "dist/rollback-test-install",
+              "-ExpectedVersion", ((Get-Content APP_VERSION -Raw).Trim()),
+              "-NoRestart"
+            ) `
+            -Wait -PassThru -NoNewWindow
+          if ($negative.ExitCode -eq 0) { throw "Malformed update unexpectedly passed" }
           if ((Get-Content dist/rollback-test-install/APP_VERSION -Raw).Trim() -ne "0.2.0") {
             throw "Rollback did not preserve previous installation"
           }
