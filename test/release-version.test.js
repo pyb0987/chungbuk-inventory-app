@@ -7,7 +7,7 @@ import { join } from "node:path";
 
 test("release version verifier rejects mismatched package metadata", () => {
   const root = mkdtempSync(join(tmpdir(), "chungbuk-version-"));
-  writeFileSync(join(root, "APP_VERSION"), "0.2.2\n");
+  writeFileSync(join(root, "APP_VERSION"), "0.2.3\n");
   writeFileSync(join(root, "package.json"), JSON.stringify({ version: "9.9.9" }));
 
   assert.throws(
@@ -15,7 +15,7 @@ test("release version verifier rejects mismatched package metadata", () => {
       execFileSync(process.execPath, [
         join(process.cwd(), "scripts", "verify-release-version.mjs"),
         root,
-        "0.2.2"
+        "0.2.3"
       ]),
     /release version mismatch/
   );
