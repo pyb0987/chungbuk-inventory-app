@@ -1,6 +1,6 @@
 {
   "name": "chungbuk-inventory-app",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Local inventory replacement app for Chungbuk office Excel workflows.",

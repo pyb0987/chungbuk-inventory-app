@@ -5,10 +5,15 @@ chcp 65001 >nul
 cd /d "%~dp0"
 
 if "%PORT%"=="" set "PORT=5177"
-set "CHUNGBUK_DATA_DIR=%~dp0user-data"
+set "LEGACY_DATA_DIR=%~dp0user-data"
+set "CHUNGBUK_DATA_DIR=%LOCALAPPDATA%\ChungbukInventory"
 
 if not exist "%CHUNGBUK_DATA_DIR%" mkdir "%CHUNGBUK_DATA_DIR%"
 if not exist "%CHUNGBUK_DATA_DIR%\backups" mkdir "%CHUNGBUK_DATA_DIR%\backups"
+if not exist "%CHUNGBUK_DATA_DIR%\chungbuk-inventory.sqlite" if exist "%LEGACY_DATA_DIR%\chungbuk-inventory.sqlite" (
+  echo 기존 사용자 데이터를 Windows 사용자 데이터 폴더로 복사합니다...
+  xcopy "%LEGACY_DATA_DIR%\*" "%CHUNGBUK_DATA_DIR%\" /E /I /Y >nul
+)
 
 set "NODE_EXE=%~dp0runtime\node\node.exe"
 if not exist "%NODE_EXE%" (

@@ -1,5 +1,8 @@
 name: Build Windows portable app
 
+permissions:
+  contents: write
+
 on:
   workflow_dispatch:
   push:
@@ -41,3 +44,15 @@ jobs:
           name: ChungbukInventory-Windows
           path: dist/chungbuk-inventory-portable-release.zip
           if-no-files-found: error
+
+      - name: Publish tagged release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create $env:GITHUB_REF_NAME `
+            "dist/chungbuk-inventory-portable-release.zip" `
+            --repo $env:GITHUB_REPOSITORY `
+            --title "Chungbuk Inventory $env:GITHUB_REF_NAME" `
+            --generate-notes

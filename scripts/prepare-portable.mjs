@@ -18,6 +18,7 @@ const portableRoot = join(outputRoot, "chungbuk-inventory-portable");
 const directoriesToCopy = ["src", "docs", "scripts", "launcher"];
 const filesToCopy = [
   "package.json",
+  "APP_VERSION",
   "README.md",
   "사용자_사용안내.md",
   "START_CHUNGBUK_APP.cmd",

@@ -51,6 +51,7 @@ function validatePortableFolder(root) {
   expectWindowsBatchLineEndings(root, "VERIFY_CHUNGBUK_APP.cmd");
   expectWindowsBatchLineEndings(root, "BUILD_WINDOWS_LAUNCHER.cmd");
   expectFile(root, "package.json");
+  expectFile(root, "APP_VERSION");
   expectFile(root, "사용자_사용안내.md");
   expectFile(root, "launcher/ChungbukInventoryLauncher.cs");
   expectFile(root, "src/app/server.js");
@@ -63,6 +64,7 @@ function validatePortableFolder(root) {
   expectFile(root, "src/ui/index.html");
   expectFile(root, "scripts/build-windows-launcher.ps1");
   expectFile(root, "scripts/start-portable.mjs");
+  expectFile(root, "scripts/apply-windows-update.ps1");
   expectFile(root, "scripts/verify-portable-runtime.mjs");
   expectDirectory(root, "user-data/backups");
 
@@ -101,6 +103,7 @@ function validatePortableZip(zipPath) {
   expectZipEntry(entrySet, "VERIFY_CHUNGBUK_APP.cmd");
   expectZipEntry(entrySet, "BUILD_WINDOWS_LAUNCHER.cmd");
   expectZipEntry(entrySet, "package.json");
+  expectZipEntry(entrySet, "APP_VERSION");
   expectZipEntry(entrySet, "사용자_사용안내.md");
   expectZipEntry(entrySet, "launcher/ChungbukInventoryLauncher.cs");
   expectZipEntry(entrySet, "src/app/server.js");
@@ -113,6 +116,7 @@ function validatePortableZip(zipPath) {
   expectZipEntry(entrySet, "src/ui/index.html");
   expectZipEntry(entrySet, "scripts/build-windows-launcher.ps1");
   expectZipEntry(entrySet, "scripts/start-portable.mjs");
+  expectZipEntry(entrySet, "scripts/apply-windows-update.ps1");
   expectZipEntry(entrySet, "scripts/verify-portable-runtime.mjs");
   expectZipEntry(entrySet, "user-data/backups/");
 
