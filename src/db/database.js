@@ -9,13 +9,40 @@ const openDatabasePaths = new Map();
 
 export function createAppDatabase(filename = ":memory:") {
   const db = new DatabaseSync(filename);
-  db.exec(schemaSql);
+  migrateDatabase(db);
   const resolvedPath = resolveDatabasePath(filename);
   if (resolvedPath) {
     databasePath.set(db, resolvedPath);
     openDatabasePaths.set(resolvedPath, (openDatabasePaths.get(resolvedPath) ?? 0) + 1);
   }
   return db;
+}
+
+export const CURRENT_SCHEMA_VERSION = 1;
+
+function migrateDatabase(db) {
+  db.exec("PRAGMA foreign_keys = ON");
+  const version = Number(db.prepare("PRAGMA user_version").get().user_version);
+  if (version > CURRENT_SCHEMA_VERSION) {
+    db.close();
+    throw new Error(
+      `database schema ${version} is newer than supported schema ${CURRENT_SCHEMA_VERSION}`
+    );
+  }
+  if (version === 0) {
+    db.exec("BEGIN IMMEDIATE");
+    try {
+      db.exec(schemaSql);
+      db.exec(`PRAGMA user_version = ${CURRENT_SCHEMA_VERSION}`);
+      db.exec("COMMIT");
+    } catch (error) {
+      db.exec("ROLLBACK");
+      throw error;
+    }
+    return;
+  }
+  // Keep idempotent indexes available while ordered migrations are added here.
+  db.exec(schemaSql);
 }
 
 export function closeDatabase(db) {

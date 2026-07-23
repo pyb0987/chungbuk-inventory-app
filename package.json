@@ -1,6 +1,6 @@
 {
   "name": "chungbuk-inventory-app",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
   "description": "Local inventory replacement app for Chungbuk office Excel workflows.",
@@ -14,7 +14,7 @@
     "validate:portable:release": "node scripts/validate-portable.mjs --require-runtime --require-launcher-exe",
     "validate:portable:zip": "node scripts/validate-portable.mjs --zip dist/chungbuk-inventory-portable-release.zip --require-runtime --require-launcher-exe",
     "test": "node --test",
-    "check": "node --check src/domain/stock-engine.js && node --check src/db/schema.js && node --check src/db/database.js && node --check src/db/repositories.js && node --check src/services/backups.js && node --check src/services/read-models.js && node --check src/services/import-current-stock.js && node --check src/services/import-usage-history.js && node --check src/services/xlsx-current-stock-parser.js && node --check src/services/xlsb-workbook-reader.js && node --check src/services/xlsx-usage-history-parser.js && node --check src/app/server.js && node --check src/ui/app.js && node --check scripts/prepare-portable.mjs && node --check scripts/start-portable.mjs && node --check scripts/validate-portable.mjs && node --check scripts/package-portable.mjs && node --check scripts/verify-portable-runtime.mjs && node --check test/ui-contract.test.js"
+    "check": "node --check src/domain/stock-engine.js && node --check src/db/schema.js && node --check src/db/database.js && node --check src/db/repositories.js && node --check src/services/backups.js && node --check src/services/read-models.js && node --check src/services/import-current-stock.js && node --check src/services/import-usage-history.js && node --check src/services/xlsx-current-stock-parser.js && node --check src/services/xlsb-workbook-reader.js && node --check src/services/xlsx-usage-history-parser.js && node --check src/app/server.js && node --check src/ui/app.js && node --check scripts/prepare-portable.mjs && node --check scripts/start-portable.mjs && node --check scripts/validate-portable.mjs && node --check scripts/package-portable.mjs && node --check scripts/verify-portable-runtime.mjs && node --check scripts/safe-database-copy.mjs && node --check scripts/verify-release-version.mjs && node --check test/ui-contract.test.js"
   },
   "engines": {
     "node": ">=25"

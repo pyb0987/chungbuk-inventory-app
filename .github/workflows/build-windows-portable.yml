@@ -25,6 +25,10 @@ jobs:
           $version = (node --version).TrimStart("v")
           $zip = "node-v$version-win-x64.zip"
           Invoke-WebRequest "https://nodejs.org/dist/v$version/$zip" -OutFile $zip
+          Invoke-WebRequest "https://nodejs.org/dist/v$version/SHASUMS256.txt" -OutFile SHASUMS256.txt
+          $expected = ((Select-String -Path SHASUMS256.txt -Pattern "^[a-f0-9]{64}  $([regex]::Escape($zip))$").Line -split "  ")[0]
+          $actual = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          if (-not $expected -or $actual -ne $expected) { throw "Node runtime SHA-256 mismatch" }
           Expand-Archive $zip -DestinationPath runtime-downloads
           New-Item -ItemType Directory -Force runtime/node | Out-Null
           Copy-Item "runtime-downloads/node-v$version-win-x64/*" runtime/node -Recurse
@@ -36,13 +40,74 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: Verify release version
+        shell: pwsh
+        run: |
+          $expected = (Get-Content APP_VERSION -Raw).Trim()
+          node scripts/verify-release-version.mjs . $expected
+          if ($env:GITHUB_REF -like "refs/tags/v*") {
+            $tagVersion = $env:GITHUB_REF_NAME.TrimStart("v")
+            if ($tagVersion -ne $expected) { throw "Tag version $tagVersion does not match $expected" }
+          }
+
       - name: Package self-contained app
         run: npm run package:portable:release
+
+      - name: Verify final archive and create manifest
+        shell: pwsh
+        run: |
+          Expand-Archive dist/chungbuk-inventory-portable-release.zip -DestinationPath dist/release-check
+          $expected = (Get-Content APP_VERSION -Raw).Trim()
+          node scripts/verify-release-version.mjs dist/release-check $expected
+          $sha = (Get-FileHash dist/chungbuk-inventory-portable-release.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          @{
+            version = $expected
+            commit = $env:GITHUB_SHA
+            asset = "chungbuk-inventory-portable-release.zip"
+            sha256 = $sha
+          } | ConvertTo-Json | Set-Content dist/release-manifest.json -Encoding utf8
+
+      - name: Exercise transactional Windows updater
+        shell: pwsh
+        run: |
+          Copy-Item dist/release-check dist/update-test-install -Recurse
+          Set-Content dist/update-test-install/APP_VERSION "0.2.0" -Encoding ascii
+          New-Item -ItemType Directory -Force dist/fake-local-data | Out-Null
+          Set-Content dist/fake-local-data/preserved.txt "inventory-data" -Encoding ascii
+          Copy-Item dist/chungbuk-inventory-portable-release.zip dist/update-test.zip
+          ./scripts/apply-windows-update.ps1 `
+            -LauncherPid 999999 `
+            -ArchivePath dist/update-test.zip `
+            -AppRoot dist/update-test-install `
+            -ExpectedVersion ((Get-Content APP_VERSION -Raw).Trim()) `
+            -NoRestart
+          node scripts/verify-release-version.mjs dist/update-test-install ((Get-Content APP_VERSION -Raw).Trim())
+          if ((Get-Content dist/fake-local-data/preserved.txt -Raw).Trim() -ne "inventory-data") {
+            throw "External user data was changed"
+          }
+
+          Copy-Item dist/release-check dist/rollback-test-install -Recurse
+          Set-Content dist/rollback-test-install/APP_VERSION "0.2.0" -Encoding ascii
+          New-Item -ItemType Directory -Force dist/malformed | Out-Null
+          Set-Content dist/malformed/APP_VERSION ((Get-Content APP_VERSION -Raw).Trim()) -Encoding ascii
+          Compress-Archive dist/malformed/* dist/malformed.zip
+          ./scripts/apply-windows-update.ps1 `
+            -LauncherPid 999999 `
+            -ArchivePath dist/malformed.zip `
+            -AppRoot dist/rollback-test-install `
+            -ExpectedVersion ((Get-Content APP_VERSION -Raw).Trim()) `
+            -NoRestart
+          if ($LASTEXITCODE -eq 0) { throw "Malformed update unexpectedly passed" }
+          if ((Get-Content dist/rollback-test-install/APP_VERSION -Raw).Trim() -ne "0.2.0") {
+            throw "Rollback did not preserve previous installation"
+          }
 
       - uses: actions/upload-artifact@v4
         with:
           name: ChungbukInventory-Windows
-          path: dist/chungbuk-inventory-portable-release.zip
+          path: |
+            dist/chungbuk-inventory-portable-release.zip
+            dist/release-manifest.json
           if-no-files-found: error
 
       - name: Publish tagged release
@@ -53,6 +118,7 @@ jobs:
         run: |
           gh release create $env:GITHUB_REF_NAME `
             "dist/chungbuk-inventory-portable-release.zip" `
+            "dist/release-manifest.json" `
             --repo $env:GITHUB_REPOSITORY `
             --title "Chungbuk Inventory $env:GITHUB_REF_NAME" `
             --generate-notes

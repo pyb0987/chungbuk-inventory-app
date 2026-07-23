@@ -10,10 +10,6 @@ set "CHUNGBUK_DATA_DIR=%LOCALAPPDATA%\ChungbukInventory"
 
 if not exist "%CHUNGBUK_DATA_DIR%" mkdir "%CHUNGBUK_DATA_DIR%"
 if not exist "%CHUNGBUK_DATA_DIR%\backups" mkdir "%CHUNGBUK_DATA_DIR%\backups"
-if not exist "%CHUNGBUK_DATA_DIR%\chungbuk-inventory.sqlite" if exist "%LEGACY_DATA_DIR%\chungbuk-inventory.sqlite" (
-  echo 기존 사용자 데이터를 Windows 사용자 데이터 폴더로 복사합니다...
-  xcopy "%LEGACY_DATA_DIR%\*" "%CHUNGBUK_DATA_DIR%\" /E /I /Y >nul
-)
 
 set "NODE_EXE=%~dp0runtime\node\node.exe"
 if not exist "%NODE_EXE%" (
@@ -34,6 +30,16 @@ if errorlevel 1 (
   echo.
   pause
   exit /b 1
+)
+
+if not exist "%CHUNGBUK_DATA_DIR%\chungbuk-inventory.sqlite" if exist "%LEGACY_DATA_DIR%\chungbuk-inventory.sqlite" (
+  echo 기존 사용자 데이터베이스를 안전하게 이전합니다...
+  "%NODE_EXE%" "%~dp0scripts\safe-database-copy.mjs" migrate "%LEGACY_DATA_DIR%\chungbuk-inventory.sqlite" "%CHUNGBUK_DATA_DIR%\chungbuk-inventory.sqlite"
+  if errorlevel 1 (
+    echo 오류: 기존 데이터베이스를 안전하게 이전하지 못했습니다.
+    pause
+    exit /b 1
+  )
 )
 
 echo 충북 재고관리 앱을 시작합니다...

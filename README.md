@@ -119,6 +119,15 @@ GitHub의 `Build Windows portable app` 작업을 실행하면 Windows용 Node �
 게시합니다. 앱은 시작할 때 최신 Release를 확인하고, 새 버전이 있으면 사용자에게
 확인한 뒤 데이터베이스를 백업하고 앱 파일만 교체합니다.
 
+업데이트 안전장치:
+
+- 실행 중인 앱은 한 개로 제한합니다.
+- SQLite 백업 API로 WAL을 포함한 일관된 스냅샷을 만들고 무결성을 검사합니다.
+- 릴리스 태그, `APP_VERSION`, `package.json` 버전이 다르면 빌드를 중단합니다.
+- 다운로드한 zip은 GitHub Release의 SHA-256 매니페스트와 대조합니다.
+- 새 앱을 별도 폴더에 풀고 필수 파일과 버전을 검사한 뒤 폴더 단위로 교체합니다.
+- 새 실행 파일의 상태 검사가 실패하면 이전 앱 폴더로 자동 복구합니다.
+
 ```text
 BUILD_WINDOWS_LAUNCHER.cmd
 ```

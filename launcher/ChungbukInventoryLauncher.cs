@@ -2,8 +2,10 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Windows.Forms;
 
 internal static class ChungbukInventoryLauncher
@@ -15,6 +17,7 @@ internal static class ChungbukInventoryLauncher
     private static Button stopButton;
     private static Label statusLabel;
     private static Timer processTimer;
+    private static Mutex instanceMutex;
 
     [STAThread]
     private static void Main()
@@ -24,6 +27,18 @@ internal static class ChungbukInventoryLauncher
         ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
 
         string appRoot = AppDomain.CurrentDomain.BaseDirectory;
+        if (Environment.GetCommandLineArgs().Length > 1 &&
+            Environment.GetCommandLineArgs()[1] == "--health-check")
+        {
+            Environment.Exit(ValidatePackageRoot(appRoot, ReadCurrentVersion(appRoot)) ? 0 : 1);
+        }
+        bool createdNew;
+        instanceMutex = new Mutex(true, "Local\\ChungbukInventoryLauncher", out createdNew);
+        if (!createdNew)
+        {
+            MessageBox.Show("충북 재고관리 앱이 이미 실행 중입니다.", "충북 재고관리");
+            return;
+        }
         string nodePath = Path.Combine(appRoot, "runtime", "node", "node.exe");
         string scriptPath = Path.Combine(appRoot, "scripts", "start-portable.mjs");
         string dataDir = Path.Combine(
@@ -52,7 +67,7 @@ internal static class ChungbukInventoryLauncher
 
         try
         {
-            MigrateLegacyUserData(appRoot, dataDir);
+            MigrateLegacyUserData(nodePath, appRoot, dataDir);
             Directory.CreateDirectory(Path.Combine(dataDir, "backups"));
             if (OfferUpdateIfAvailable(appRoot, dataDir))
             {
@@ -82,7 +97,7 @@ internal static class ChungbukInventoryLauncher
         }
     }
 
-    private static void MigrateLegacyUserData(string appRoot, string dataDir)
+    private static void MigrateLegacyUserData(string nodePath, string appRoot, string dataDir)
     {
         string legacyDir = Path.Combine(appRoot, "user-data");
         string targetDatabase = Path.Combine(dataDir, "chungbuk-inventory.sqlite");
@@ -91,7 +106,7 @@ internal static class ChungbukInventoryLauncher
         Directory.CreateDirectory(dataDir);
         if (!File.Exists(targetDatabase) && File.Exists(legacyDatabase))
         {
-            CopyDirectory(legacyDir, dataDir);
+            RunDatabaseCopy(nodePath, appRoot, "migrate", legacyDatabase, targetDatabase);
             MessageBox.Show(
                 "기존 재고 데이터를 안전한 Windows 사용자 데이터 폴더로 옮겼습니다.\n\n" + dataDir,
                 "충북 재고관리",
@@ -122,12 +137,21 @@ internal static class ChungbukInventoryLauncher
                 return false;
             }
 
-            BackupDatabaseBeforeUpdate(dataDir, currentVersionText);
+            BackupDatabaseBeforeUpdate(
+                Path.Combine(appRoot, "runtime", "node", "node.exe"),
+                appRoot,
+                dataDir,
+                currentVersionText);
             string archivePath = Path.Combine(
                 Path.GetTempPath(),
                 "ChungbukInventory-" + release.Version + "-" + Guid.NewGuid().ToString("N") + ".zip");
             DownloadFile(release.DownloadUrl, archivePath);
-            StartUpdater(appRoot, archivePath);
+            if (!String.Equals(ComputeSha256(archivePath), release.Sha256, StringComparison.OrdinalIgnoreCase))
+            {
+                File.Delete(archivePath);
+                throw new InvalidDataException("업데이트 파일의 SHA-256 검증에 실패했습니다.");
+            }
+            StartUpdater(appRoot, archivePath, release.Version);
             return true;
         }
         catch (Exception error)
@@ -167,11 +191,27 @@ internal static class ChungbukInventoryLauncher
             json,
             "\"browser_download_url\"\\s*:\\s*\"([^\"]*chungbuk-inventory-portable-release\\.zip)\"",
             RegexOptions.IgnoreCase);
-        if (!tag.Success || !asset.Success)
+        Match manifestAsset = Regex.Match(
+            json,
+            "\"browser_download_url\"\\s*:\\s*\"([^\"]*release-manifest\\.json)\"",
+            RegexOptions.IgnoreCase);
+        if (!tag.Success || !asset.Success || !manifestAsset.Success)
         {
             return null;
         }
-        return new ReleaseInfo(tag.Groups[1].Value, asset.Groups[1].Value.Replace("\\/", "/"));
+        string version = tag.Groups[1].Value;
+        string downloadUrl = asset.Groups[1].Value.Replace("\\/", "/");
+        string manifestUrl = manifestAsset.Groups[1].Value.Replace("\\/", "/");
+        ValidateReleaseUrl(downloadUrl, version);
+        ValidateReleaseUrl(manifestUrl, version);
+        string manifest = DownloadText(manifestUrl);
+        Match manifestVersion = Regex.Match(manifest, "\"version\"\\s*:\\s*\"([^\"]+)\"");
+        Match sha256 = Regex.Match(manifest, "\"sha256\"\\s*:\\s*\"([a-fA-F0-9]{64})\"");
+        if (!manifestVersion.Success || !sha256.Success || manifestVersion.Groups[1].Value != version)
+        {
+            throw new InvalidDataException("릴리스 매니페스트가 버전과 일치하지 않습니다.");
+        }
+        return new ReleaseInfo(version, downloadUrl, sha256.Groups[1].Value.ToLowerInvariant());
     }
 
     private static bool IsNewerVersion(string candidate, string current)
@@ -183,7 +223,11 @@ internal static class ChungbukInventoryLauncher
             candidateVersion.CompareTo(currentVersion) > 0;
     }
 
-    private static void BackupDatabaseBeforeUpdate(string dataDir, string currentVersion)
+    private static void BackupDatabaseBeforeUpdate(
+        string nodePath,
+        string appRoot,
+        string dataDir,
+        string currentVersion)
     {
         string databasePath = Path.Combine(dataDir, "chungbuk-inventory.sqlite");
         if (!File.Exists(databasePath))
@@ -193,10 +237,12 @@ internal static class ChungbukInventoryLauncher
         string backupDir = Path.Combine(dataDir, "backups");
         Directory.CreateDirectory(backupDir);
         string stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
-        File.Copy(
+        RunDatabaseCopy(
+            nodePath,
+            appRoot,
+            "backup",
             databasePath,
-            Path.Combine(backupDir, "before-update-" + currentVersion + "-" + stamp + ".sqlite"),
-            true);
+            Path.Combine(backupDir, "before-update-" + currentVersion + "-" + stamp + ".sqlite"));
     }
 
     private static void DownloadFile(string url, string targetPath)
@@ -208,7 +254,7 @@ internal static class ChungbukInventoryLauncher
         }
     }
 
-    private static void StartUpdater(string appRoot, string archivePath)
+    private static void StartUpdater(string appRoot, string archivePath, string expectedVersion)
     {
         string updaterPath = Path.Combine(appRoot, "scripts", "apply-windows-update.ps1");
         if (!File.Exists(updaterPath))
@@ -221,34 +267,88 @@ internal static class ChungbukInventoryLauncher
             "-NoProfile -ExecutionPolicy Bypass -File " + Quote(updaterPath) +
             " -LauncherPid " + Process.GetCurrentProcess().Id +
             " -ArchivePath " + Quote(archivePath) +
-            " -AppRoot " + Quote(appRoot);
+            " -AppRoot " + Quote(appRoot) +
+            " -ExpectedVersion " + Quote(expectedVersion);
         info.UseShellExecute = false;
         info.CreateNoWindow = true;
         Process.Start(info);
     }
 
-    private static void CopyDirectory(string sourceDir, string targetDir)
+    private static void RunDatabaseCopy(
+        string nodePath,
+        string appRoot,
+        string operation,
+        string source,
+        string target)
     {
-        Directory.CreateDirectory(targetDir);
-        foreach (string file in Directory.GetFiles(sourceDir))
+        string helper = Path.Combine(appRoot, "scripts", "safe-database-copy.mjs");
+        ProcessStartInfo info = new ProcessStartInfo();
+        info.FileName = nodePath;
+        info.Arguments = Quote(helper) + " " + operation + " " + Quote(source) + " " + Quote(target);
+        info.WorkingDirectory = appRoot;
+        info.UseShellExecute = false;
+        info.CreateNoWindow = true;
+        using (Process process = Process.Start(info))
         {
-            File.Copy(file, Path.Combine(targetDir, Path.GetFileName(file)), true);
+            process.WaitForExit();
+            if (process.ExitCode != 0 && !(operation == "migrate" && process.ExitCode == 3))
+            {
+                throw new InvalidOperationException("안전한 데이터베이스 복사에 실패했습니다.");
+            }
         }
-        foreach (string directory in Directory.GetDirectories(sourceDir))
+    }
+
+    private static string DownloadText(string url)
+    {
+        using (WebClient client = new WebClient())
         {
-            CopyDirectory(directory, Path.Combine(targetDir, Path.GetFileName(directory)));
+            client.Headers.Add(HttpRequestHeader.UserAgent, "ChungbukInventory");
+            return client.DownloadString(url);
         }
+    }
+
+    private static void ValidateReleaseUrl(string url, string version)
+    {
+        Uri uri;
+        string expectedPrefix = "/pyb0987/chungbuk-inventory-app/releases/download/v" + version + "/";
+        if (!Uri.TryCreate(url, UriKind.Absolute, out uri) ||
+            uri.Scheme != Uri.UriSchemeHttps ||
+            !String.Equals(uri.Host, "github.com", StringComparison.OrdinalIgnoreCase) ||
+            !uri.AbsolutePath.StartsWith(expectedPrefix, StringComparison.Ordinal))
+        {
+            throw new InvalidDataException("허용되지 않은 업데이트 주소입니다.");
+        }
+    }
+
+    private static string ComputeSha256(string path)
+    {
+        using (SHA256 hash = SHA256.Create())
+        using (FileStream stream = File.OpenRead(path))
+        {
+            return BitConverter.ToString(hash.ComputeHash(stream)).Replace("-", "").ToLowerInvariant();
+        }
+    }
+
+    private static bool ValidatePackageRoot(string root, string expectedVersion)
+    {
+        return File.Exists(Path.Combine(root, "ChungbukInventory.exe")) &&
+            File.Exists(Path.Combine(root, "runtime", "node", "node.exe")) &&
+            File.Exists(Path.Combine(root, "scripts", "start-portable.mjs")) &&
+            File.Exists(Path.Combine(root, "scripts", "apply-windows-update.ps1")) &&
+            ReadCurrentVersion(root) == expectedVersion;
     }
 
     private sealed class ReleaseInfo
     {
         public readonly string Version;
         public readonly string DownloadUrl;
+        public readonly string Sha256;
 
-        public ReleaseInfo(string version, string downloadUrl)
+        public ReleaseInfo(string version, string downloadUrl, string sha256)
         {
             Version = version;
             DownloadUrl = downloadUrl;
+            Sha256 = sha256;
         }
     }
 

@@ -65,8 +65,14 @@ function validatePortableFolder(root) {
   expectFile(root, "scripts/build-windows-launcher.ps1");
   expectFile(root, "scripts/start-portable.mjs");
   expectFile(root, "scripts/apply-windows-update.ps1");
+  expectFile(root, "scripts/safe-database-copy.mjs");
+  expectFile(root, "scripts/verify-release-version.mjs");
   expectFile(root, "scripts/verify-portable-runtime.mjs");
   expectDirectory(root, "user-data/backups");
+  validateVersionValues(
+    readFileSync(join(root, "APP_VERSION"), "utf8"),
+    readFileSync(join(root, "package.json"), "utf8")
+  );
 
   if (existsSync(join(root, "data"))) {
     failures.push("배포 폴더에는 개발용 data/ 폴더가 들어가면 안 됩니다.");
@@ -117,8 +123,18 @@ function validatePortableZip(zipPath) {
   expectZipEntry(entrySet, "scripts/build-windows-launcher.ps1");
   expectZipEntry(entrySet, "scripts/start-portable.mjs");
   expectZipEntry(entrySet, "scripts/apply-windows-update.ps1");
+  expectZipEntry(entrySet, "scripts/safe-database-copy.mjs");
+  expectZipEntry(entrySet, "scripts/verify-release-version.mjs");
   expectZipEntry(entrySet, "scripts/verify-portable-runtime.mjs");
   expectZipEntry(entrySet, "user-data/backups/");
+  try {
+    validateVersionValues(
+      readStoredZipEntry(zipPath, "APP_VERSION").toString("utf8"),
+      readStoredZipEntry(zipPath, "package.json").toString("utf8")
+    );
+  } catch (error) {
+    failures.push(`zip 버전 값을 확인하지 못했습니다: ${error.message}`);
+  }
 
   if (entries.some((entry) => entry === "data/" || entry.startsWith("data/"))) {
     failures.push("배포 zip에는 개발용 data/ 폴더가 들어가면 안 됩니다.");
@@ -136,6 +152,41 @@ function validatePortableZip(zipPath) {
   if (requireLauncherExe && !entrySet.has("ChungbukInventory.exe")) {
     failures.push("배포 zip에는 ChungbukInventory.exe가 필요합니다.");
   }
+}
+
+function validateVersionValues(appVersionText, packageJsonText) {
+  const appVersion = appVersionText.trim();
+  const packageVersion = JSON.parse(packageJsonText).version;
+  if (!/^\d+\.\d+\.\d+$/.test(appVersion) || appVersion !== packageVersion) {
+    failures.push(
+      `버전이 일치하지 않습니다: APP_VERSION=${appVersion}, package.json=${packageVersion}`
+    );
+  }
+}
+
+function readStoredZipEntry(zipPath, requestedName) {
+  const buffer = readFileSync(zipPath);
+  const endRecordOffset = findEndOfCentralDirectory(buffer);
+  const entryCount = buffer.readUInt16LE(endRecordOffset + 10);
+  let offset = buffer.readUInt32LE(endRecordOffset + 16);
+  for (let index = 0; index < entryCount; index += 1) {
+    const compression = buffer.readUInt16LE(offset + 10);
+    const compressedSize = buffer.readUInt32LE(offset + 20);
+    const nameLength = buffer.readUInt16LE(offset + 28);
+    const extraLength = buffer.readUInt16LE(offset + 30);
+    const commentLength = buffer.readUInt16LE(offset + 32);
+    const localOffset = buffer.readUInt32LE(offset + 42);
+    const name = buffer.subarray(offset + 46, offset + 46 + nameLength).toString("utf8");
+    if (name === requestedName) {
+      if (compression !== 0) throw new Error(`unsupported compression for ${requestedName}`);
+      const localNameLength = buffer.readUInt16LE(localOffset + 26);
+      const localExtraLength = buffer.readUInt16LE(localOffset + 28);
+      const start = localOffset + 30 + localNameLength + localExtraLength;
+      return buffer.subarray(start, start + compressedSize);
+    }
+    offset += 46 + nameLength + extraLength + commentLength;
+  }
+  throw new Error(`missing zip entry: ${requestedName}`);
 }
 
 function expectFile(root, relativePath) {
