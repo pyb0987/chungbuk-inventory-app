@@ -19,7 +19,7 @@ test("local app server serves UI state and records a transaction", async () => {
     assert.equal(initial.inventory.rows.length, 0);
     assert.deepEqual(
       initial.transactionTypes.map((entry) => entry.label),
-      ["개인 출고", "개인 입고", "서울로 반납", "서울에서 파트실로 택배", "사무실 사용/보유", "사무실 입고"]
+      ["개인 출고", "개인 입고", "개인 설치", "개인 회수", "서울로 반납", "서울에서 파트실로 택배", "사무실 출고", "사무실 입고"]
     );
 
     const imported = await postJson(`${app.url}/api/import/current-stock`, {
@@ -57,6 +57,35 @@ test("local app server serves UI state and records a transaction", async () => {
     assert.equal(row.personHoldings["정상호"], 3);
     assert.equal(transaction.state.transactions[0].label, "출고");
 
+    const installed = await postJson(`${app.url}/api/transactions`, {
+      occurredOn: "2026-07-14",
+      type: "개인 설치",
+      itemId,
+      personId,
+      quantity: 1
+    }, 201);
+    assert.equal(installed.state.inventory.rows[0].partRoomQuantity, 3);
+    assert.equal(installed.state.inventory.rows[0].personHoldings["정상호"], 2);
+
+    const rejectedInstall = await postJson(`${app.url}/api/transactions`, {
+      occurredOn: "2026-07-14",
+      type: "개인 설치",
+      itemId,
+      personId,
+      quantity: 3
+    }, 400);
+    assert.match(rejectedInstall.error, /재고가 부족하여 저장할 수 없습니다/);
+    assert.match(rejectedInstall.error, /공유기/);
+    assert.match(rejectedInstall.error, /정상호/);
+
+    await postJson(`${app.url}/api/transactions`, {
+      occurredOn: "2026-07-14",
+      type: "개인 회수",
+      itemId,
+      personId,
+      quantity: 1
+    }, 201);
+
     const adjusted = await postJson(`${app.url}/api/stock-adjustments`, {
       occurredOn: "2026-07-14",
       itemId,
@@ -74,7 +103,9 @@ test("local app server serves UI state and records a transaction", async () => {
       quantityDelta: -100,
       reason: "negative test"
     }, 400);
-    assert.match(rejectedAdjustment.error, /negative stock is not allowed/);
+    assert.match(rejectedAdjustment.error, /재고가 부족하여 저장할 수 없습니다/);
+    assert.match(rejectedAdjustment.error, /공유기/);
+    assert.match(rejectedAdjustment.error, /파트실/);
 
     const updated = await patchJson(`${app.url}/api/transactions/${transaction.transaction.id}`, {
       occurredOn: "2026-07-14",
@@ -88,23 +119,32 @@ test("local app server serves UI state and records a transaction", async () => {
     });
 
     const updatedRow = updated.state.inventory.rows[0];
+    const updatedTransaction = updated.state.transactions.find(
+      (entry) => entry.id === transaction.transaction.id
+    );
     assert.equal(updatedRow.partRoomQuantity, 3);
     assert.equal(updatedRow.personHoldings["정상호"], 2);
-    assert.equal(updated.state.transactions[0].itemId, itemId);
-    assert.equal(updated.state.transactions[0].personId, personId);
-    assert.equal(updated.state.transactions[0].note, "server smoke edited");
+    assert.equal(updatedTransaction.itemId, itemId);
+    assert.equal(updatedTransaction.personId, personId);
+    assert.equal(updatedTransaction.note, "server smoke edited");
     assert.equal(updated.state.auditLog[0].actionLabel, "수정");
     assert.match(updated.state.auditLog[0].afterSummary, /수량 1/);
 
     const deletedTransaction = await deleteJson(`${app.url}/api/transactions/${transaction.transaction.id}`, {
       reason: "server smoke delete"
     });
-    assert.equal(deletedTransaction.state.transactions[0].isDeleted, true);
+    assert.equal(
+      deletedTransaction.state.transactions.find((entry) => entry.id === transaction.transaction.id).isDeleted,
+      true
+    );
     const restoredTransaction = await postJson(
       `${app.url}/api/transactions/${transaction.transaction.id}/restore`,
       { reason: "server smoke restore" }
     );
-    assert.equal(restoredTransaction.state.transactions[0].isDeleted, false);
+    assert.equal(
+      restoredTransaction.state.transactions.find((entry) => entry.id === transaction.transaction.id).isDeleted,
+      false
+    );
     assert.equal(restoredTransaction.state.inventory.rows[0].partRoomQuantity, 3);
 
     const serial = await postJson(`${app.url}/api/serials`, {

@@ -953,7 +953,12 @@ function assertValidAdjustmentInput(db, input) {
 }
 
 function requiresPerson(type) {
-  return type === "personal_in" || type === "personal_out";
+  return [
+    "personal_in",
+    "personal_out",
+    "personal_install",
+    "personal_recover"
+  ].includes(type);
 }
 
 function requireText(value, label) {

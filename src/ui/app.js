@@ -14,13 +14,20 @@ const state = {
 const movementText = {
   personal_out: "파트실 - / 개인 +",
   personal_in: "개인 - / 파트실 +",
+  personal_install: "개인 보유 - / 설치",
+  personal_recover: "회수 / 개인 보유 +",
   return_to_seoul: "파트실 - / 서울",
   seoul_to_part_room: "서울 / 파트실 +",
   office_out: "파트실 - / 사무실 +",
   office_in: "사무실 - / 파트실 +"
 };
 
-const needsPerson = new Set(["personal_in", "personal_out"]);
+const needsPerson = new Set([
+  "personal_in",
+  "personal_out",
+  "personal_install",
+  "personal_recover"
+]);
 const itemPickerLimit = 12;
 
 const elements = {

@@ -12,6 +12,8 @@ export const TransactionTypes = Object.freeze({
   SEOUL_TO_PART_ROOM: "seoul_to_part_room",
   OFFICE_OUT: "office_out",
   OFFICE_IN: "office_in",
+  PERSONAL_INSTALL: "personal_install",
+  PERSONAL_RECOVER: "personal_recover",
   ADJUSTMENT: "adjustment"
 });
 
@@ -20,8 +22,10 @@ export const TransactionLabels = Object.freeze({
   [TransactionTypes.PERSONAL_OUT]: "출고",
   [TransactionTypes.RETURN_TO_SEOUL]: "서울로 반납",
   [TransactionTypes.SEOUL_TO_PART_ROOM]: "서울에서 파트실로 택배",
-  [TransactionTypes.OFFICE_OUT]: "사무실 사용/보유",
+  [TransactionTypes.OFFICE_OUT]: "사무실 출고",
   [TransactionTypes.OFFICE_IN]: "사무실 입고",
+  [TransactionTypes.PERSONAL_INSTALL]: "개인 설치",
+  [TransactionTypes.PERSONAL_RECOVER]: "개인 회수",
   [TransactionTypes.ADJUSTMENT]: "재고 조정"
 });
 
@@ -39,7 +43,9 @@ export const LegacyAliases = Object.freeze({
   "사무실 사용/보유": TransactionTypes.OFFICE_OUT,
   "사무실": TransactionTypes.OFFICE_OUT,
   "사무실 출고": TransactionTypes.OFFICE_OUT,
-  "사무실 입고": TransactionTypes.OFFICE_IN
+  "사무실 입고": TransactionTypes.OFFICE_IN,
+  "개인 설치": TransactionTypes.PERSONAL_INSTALL,
+  "개인 회수": TransactionTypes.PERSONAL_RECOVER
 });
 
 export function normalizeTransactionType(input) {
@@ -84,6 +90,14 @@ export function buildDeltas(transaction) {
         delta(Buckets.PERSON, transaction.personId, -quantity),
         delta(Buckets.PART_ROOM, null, quantity)
       ];
+
+    case TransactionTypes.PERSONAL_INSTALL:
+      requirePerson(transaction);
+      return [delta(Buckets.PERSON, transaction.personId, -quantity)];
+
+    case TransactionTypes.PERSONAL_RECOVER:
+      requirePerson(transaction);
+      return [delta(Buckets.PERSON, transaction.personId, quantity)];
 
     case TransactionTypes.RETURN_TO_SEOUL:
       return [
@@ -178,7 +192,13 @@ function assertNoNegativeInternalStock(stock) {
   for (const [key, quantity] of stock.entries()) {
     const parsed = parseStockKey(key);
     if (parsed.bucket !== Buckets.SEOUL && quantity < 0) {
-      throw new Error(`negative stock is not allowed: ${key} = ${quantity}`);
+      const error = new Error(`negative stock is not allowed: ${key} = ${quantity}`);
+      error.code = "INSUFFICIENT_STOCK";
+      error.itemId = Number(parsed.itemId);
+      error.bucket = parsed.bucket;
+      error.holderId = parsed.holderId ? Number(parsed.holderId) : null;
+      error.resultingQuantity = quantity;
+      throw error;
     }
   }
 }

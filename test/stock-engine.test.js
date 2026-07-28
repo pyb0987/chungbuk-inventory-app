@@ -83,6 +83,42 @@ test("사무실 입고 moves office stock back to the part room", () => {
   assert.equal(next.get(stockKey(1, Buckets.OFFICE)), 1);
 });
 
+test("개인 설치 removes stock only from the selected person's holdings", () => {
+  const stock = new Map([
+    [stockKey(1, Buckets.PART_ROOM), 5],
+    [stockKey(1, Buckets.PERSON, 10), 3]
+  ]);
+
+  const next = applyTransaction(stock, {
+    type: TransactionTypes.PERSONAL_INSTALL,
+    itemId: 1,
+    personId: 10,
+    quantity: 1
+  });
+
+  assert.equal(next.get(stockKey(1, Buckets.PART_ROOM)), 5);
+  assert.equal(next.get(stockKey(1, Buckets.PERSON, 10)), 2);
+  assert.equal(totalForItem(next, 1), 7);
+});
+
+test("개인 회수 adds stock only to the selected person's holdings", () => {
+  const stock = new Map([
+    [stockKey(1, Buckets.PART_ROOM), 5],
+    [stockKey(1, Buckets.PERSON, 10), 2]
+  ]);
+
+  const next = applyTransaction(stock, {
+    type: TransactionTypes.PERSONAL_RECOVER,
+    itemId: 1,
+    personId: 10,
+    quantity: 1
+  });
+
+  assert.equal(next.get(stockKey(1, Buckets.PART_ROOM)), 5);
+  assert.equal(next.get(stockKey(1, Buckets.PERSON, 10)), 3);
+  assert.equal(totalForItem(next, 1), 8);
+});
+
 test("negative internal stock is blocked", () => {
   const stock = new Map([[stockKey(1, Buckets.PART_ROOM), 1]]);
 
@@ -105,4 +141,6 @@ test("legacy labels normalize to confirmed transaction types", () => {
     TransactionTypes.SEOUL_TO_PART_ROOM
   );
   assert.equal(normalizeTransactionType("서울 입고"), TransactionTypes.SEOUL_TO_PART_ROOM);
+  assert.equal(normalizeTransactionType("개인 설치"), TransactionTypes.PERSONAL_INSTALL);
+  assert.equal(normalizeTransactionType("개인 회수"), TransactionTypes.PERSONAL_RECOVER);
 });

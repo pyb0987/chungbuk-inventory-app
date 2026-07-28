@@ -70,6 +70,11 @@ export function startAppServer(options = {}) {
 
   let db = createAppDatabase(databasePath);
   const server = createServer((request, response) => {
+    const startedAt = Date.now();
+    const mutation = request.method !== "GET";
+    if (mutation) {
+      console.log(`요청 시작: ${request.method} ${request.url}`);
+    }
     handleRequest({
       request,
       response,
@@ -80,12 +85,16 @@ export function startAppServer(options = {}) {
       databasePath,
       uiDir,
       backupDir
+    }).then(() => {
+      if (mutation) {
+        console.log(`요청 완료: ${request.method} ${request.url} (${Date.now() - startedAt}ms)`);
+      }
     }).catch((error) => {
       console.error(`요청 실패: ${request.method} ${request.url}`);
       console.error(error);
       if (!response.headersSent) {
         sendJson(response, httpStatusForError(error), {
-          error: error.message || "예상하지 못한 서버 오류가 발생했습니다"
+          error: publicErrorMessage(error, getDbSafely(db))
         });
       } else {
         response.end();
@@ -451,6 +460,8 @@ function buildState(db) {
     transactionTypes: [
       TransactionTypes.PERSONAL_OUT,
       TransactionTypes.PERSONAL_IN,
+      TransactionTypes.PERSONAL_INSTALL,
+      TransactionTypes.PERSONAL_RECOVER,
       TransactionTypes.RETURN_TO_SEOUL,
       TransactionTypes.SEOUL_TO_PART_ROOM,
       TransactionTypes.OFFICE_OUT,
@@ -483,6 +494,31 @@ function entryLabelForTransactionType(type) {
     return "개인 입고";
   }
   return TransactionLabels[type];
+}
+
+function publicErrorMessage(error, db) {
+  if (error.code !== "INSUFFICIENT_STOCK" || !db) {
+    return error.message || "예상하지 못한 서버 오류가 발생했습니다";
+  }
+  const item = db.prepare("SELECT name FROM items WHERE id = ?").get(error.itemId);
+  const person = error.holderId
+    ? db.prepare("SELECT name FROM people WHERE id = ?").get(error.holderId)
+    : null;
+  const location =
+    error.bucket === Buckets.PERSON
+      ? `개인 '${person?.name ?? `#${error.holderId}`}' 보유`
+      : error.bucket === Buckets.OFFICE
+        ? "사무실"
+        : "파트실";
+  return `재고가 부족하여 저장할 수 없습니다. 품목: ${item?.name ?? `#${error.itemId}`}, 위치: ${location}, 부족 수량: ${Math.abs(error.resultingQuantity)}개`;
+}
+
+function getDbSafely(db) {
+  try {
+    return db;
+  } catch {
+    return null;
+  }
 }
 
 function normalizeTransactionInput(input) {

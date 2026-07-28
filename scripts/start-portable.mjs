@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { appendFileSync, mkdirSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readdirSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -9,10 +9,11 @@ const dataDir = resolve(process.env.CHUNGBUK_DATA_DIR ?? join(appRoot, "user-dat
 const port = Number(process.env.PORT ?? 5177);
 const logDir = join(dataDir, "logs");
 const logPath = join(logDir, "app.log");
+const logRetentionDays = 90;
 
 mkdirSync(join(dataDir, "backups"), { recursive: true });
 mkdirSync(logDir, { recursive: true });
-installFileLogging(logPath);
+installFileLogging(logDir, logPath);
 
 let app = null;
 
@@ -71,13 +72,30 @@ function openBrowser(url) {
   child.unref();
 }
 
-function installFileLogging(filePath) {
+function installFileLogging(directory, currentLogPath) {
   const originalLog = console.log.bind(console);
   const originalError = console.error.bind(console);
+  let currentDate = localDateKey(new Date());
+
+  if (
+    existsSync(currentLogPath) &&
+    localDateKey(new Date(statSync(currentLogPath).mtimeMs)) !== currentDate
+  ) {
+    writeFileSync(currentLogPath, "", "utf8");
+  }
+  pruneOldLogs(directory, logRetentionDays);
 
   const write = (level, values) => {
+    const date = localDateKey(new Date());
+    if (date !== currentDate) {
+      currentDate = date;
+      writeFileSync(currentLogPath, "", "utf8");
+      pruneOldLogs(directory, logRetentionDays);
+    }
     const rendered = values.map(renderLogValue).join(" ");
-    appendFileSync(filePath, `[${new Date().toISOString()}] ${level} ${rendered}\n`, "utf8");
+    const line = `[${new Date().toISOString()}] ${level} ${rendered}\n`;
+    appendFileSync(join(directory, `app-${date}.log`), line, "utf8");
+    appendFileSync(currentLogPath, line, "utf8");
   };
 
   console.log = (...values) => {
@@ -89,6 +107,26 @@ function installFileLogging(filePath) {
     write("ERROR", values);
     originalError(...values);
   };
+}
+
+function localDateKey(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function pruneOldLogs(directory, retentionDays) {
+  const cutoff = Date.now() - retentionDays * 24 * 60 * 60 * 1000;
+  for (const name of readdirSync(directory)) {
+    if (!/^app-\d{4}-\d{2}-\d{2}\.log$/.test(name)) {
+      continue;
+    }
+    const path = join(directory, name);
+    if (statSync(path).mtimeMs < cutoff) {
+      unlinkSync(path);
+    }
+  }
 }
 
 function renderLogValue(value) {

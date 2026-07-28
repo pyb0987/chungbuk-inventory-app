@@ -195,8 +195,12 @@ function validateTransactions(db) {
     if (!validTypes.includes(row.type)) {
       throw new Error(`backup has invalid transaction type at row ${row.id}: ${row.type}`);
     }
-    const requiresPerson =
-      row.type === TransactionTypes.PERSONAL_IN || row.type === TransactionTypes.PERSONAL_OUT;
+    const requiresPerson = [
+      TransactionTypes.PERSONAL_IN,
+      TransactionTypes.PERSONAL_OUT,
+      TransactionTypes.PERSONAL_INSTALL,
+      TransactionTypes.PERSONAL_RECOVER
+    ].includes(row.type);
     if (requiresPerson && !row.personId) {
       throw new Error(`backup has personal transaction without person at row ${row.id}`);
     }
