@@ -43,8 +43,9 @@ Revisit `node:sqlite` before final packaging if:
 ## Portable Folder Notes
 
 - `START_CHUNGBUK_APP.cmd` is the current Windows-friendly launcher.
-- The launcher uses `user-data/` beside the app folder for the live SQLite
-  database and backup files.
+- The Windows launcher uses
+  `C:\Users\Public\Documents\ChungbukInventory` for the live SQLite database,
+  backups, and logs shared by Windows accounts on the same computer.
 - The launcher requires a bundled `runtime\node\node.exe` for handoff and fails
   clearly if it is missing or incompatible.
 - `scripts/start-portable.mjs` starts the server and opens the browser only

@@ -86,7 +86,7 @@ user-data\
 성공 기준:
 
 - 백업 목록에 `created` 상태가 표시됩니다.
-- `user-data\backups` 폴더 안에 백업 파일이 생깁니다.
+- `C:\Users\Public\Documents\ChungbukInventory\backups` 폴더 안에 백업 파일이 생깁니다.
 - `최근 백업`에 백업 사유, 파일명, 시간이 표시됩니다.
 
 ## 6. 변경 기록 확인
@@ -102,5 +102,6 @@ user-data\
 
 ## 통과 후 안내
 
-스모크 테스트가 끝난 뒤 실제 사용을 시작할 때는 `user-data` 폴더를 삭제하지 마세요.
-이 폴더에 실제 데이터베이스와 백업이 저장됩니다.
+스모크 테스트가 끝난 뒤 실제 사용을 시작할 때는
+`C:\Users\Public\Documents\ChungbukInventory` 폴더를 삭제하지 마세요.
+이 공용 폴더에 실제 데이터베이스와 백업이 저장되며 두 Windows 계정이 함께 사용합니다.

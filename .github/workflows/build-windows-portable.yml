@@ -40,6 +40,38 @@ jobs:
         shell: pwsh
         run: ./scripts/build-windows-launcher.ps1
 
+      - name: Test shared Windows data migration and conflict guard
+        shell: pwsh
+        run: |
+          $migrationRoot = Join-Path $env:RUNNER_TEMP "chungbuk-shared-migration"
+          $sourceDir = Join-Path $migrationRoot "account-a"
+          $conflictDir = Join-Path $migrationRoot "account-b"
+          $sharedDir = Join-Path $migrationRoot "public"
+          New-Item -ItemType Directory -Force $sourceDir, $conflictDir | Out-Null
+
+          $env:TEST_DATABASE = Join-Path $sourceDir "chungbuk-inventory.sqlite"
+          node --input-type=module -e "import { createAppDatabase, closeDatabase } from './src/db/database.js'; import { createItem } from './src/db/repositories.js'; const db=createAppDatabase(process.env.TEST_DATABASE); createItem(db,{name:'공유 이전 테스트'}); closeDatabase(db);"
+
+          $migration = Start-Process `
+            -FilePath ./ChungbukInventory.exe `
+            -ArgumentList @("--shared-migration-test", $sourceDir, $sharedDir) `
+            -Wait `
+            -PassThru
+          if ($migration.ExitCode -ne 0) { throw "Shared database migration failed" }
+          node scripts/safe-database-copy.mjs validate (Join-Path $sharedDir "chungbuk-inventory.sqlite")
+          if (-not (Test-Path (Join-Path $sourceDir ".migrated-to-shared-data"))) {
+            throw "Shared database migration marker was not created"
+          }
+
+          $env:TEST_DATABASE = Join-Path $conflictDir "chungbuk-inventory.sqlite"
+          node --input-type=module -e "import { createAppDatabase, closeDatabase } from './src/db/database.js'; import { createItem } from './src/db/repositories.js'; const db=createAppDatabase(process.env.TEST_DATABASE); createItem(db,{name:'충돌 테스트'}); closeDatabase(db);"
+          $conflict = Start-Process `
+            -FilePath ./ChungbukInventory.exe `
+            -ArgumentList @("--shared-migration-test", $conflictDir, $sharedDir) `
+            -Wait `
+            -PassThru
+          if ($conflict.ExitCode -ne 2) { throw "Conflicting account database was not blocked" }
+
       - name: Test
         run: npm test
 
@@ -87,7 +119,7 @@ jobs:
         run: |
           Copy-Item dist/release-check dist/update-test-install -Recurse
           Set-Content dist/update-test-install/APP_VERSION "0.2.0" -Encoding ascii
-          $actualDataDir = Join-Path $env:LOCALAPPDATA "ChungbukInventory"
+          $actualDataDir = Join-Path ([Environment]::GetFolderPath("CommonDocuments")) "ChungbukInventory"
           New-Item -ItemType Directory -Force $actualDataDir | Out-Null
           Set-Content (Join-Path $actualDataDir "preserved.txt") "inventory-data" -Encoding ascii
           Copy-Item dist/chungbuk-inventory-portable-release.zip dist/update-test.zip

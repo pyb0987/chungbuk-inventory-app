@@ -2,7 +2,9 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
+using System.Security.AccessControl;
 using System.Security.Cryptography;
+using System.Security.Principal;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -37,8 +39,41 @@ internal static class ChungbukInventoryLauncher
             string expected = commandLine.Length > 2 ? commandLine[2] : "";
             Environment.Exit(ValidatePackageRoot(appRoot, expected) ? 0 : 1);
         }
+        if (commandLine.Length > 3 && commandLine[1] == "--shared-migration-test")
+        {
+            string testSourceDir = commandLine[2];
+            string testSharedDir = commandLine[3];
+            try
+            {
+                MigrateToSharedUserData(
+                    Path.Combine(appRoot, "runtime", "node", "node.exe"),
+                    appRoot,
+                    testSharedDir,
+                    testSourceDir,
+                    false);
+                Environment.Exit(0);
+            }
+            catch (InvalidOperationException)
+            {
+                Environment.Exit(2);
+            }
+            catch
+            {
+                Environment.Exit(1);
+            }
+        }
         bool createdNew;
-        instanceMutex = new Mutex(true, "Local\\ChungbukInventoryLauncher", out createdNew);
+        MutexSecurity mutexSecurity = new MutexSecurity();
+        mutexSecurity.AddAccessRule(
+            new MutexAccessRule(
+                new SecurityIdentifier(WellKnownSidType.WorldSid, null),
+                MutexRights.FullControl,
+                AccessControlType.Allow));
+        instanceMutex = new Mutex(
+            true,
+            "Global\\ChungbukInventoryLauncher",
+            out createdNew,
+            mutexSecurity);
         if (!createdNew)
         {
             MessageBox.Show("충북 재고관리 앱이 이미 실행 중입니다.", "충북 재고관리");
@@ -46,8 +81,11 @@ internal static class ChungbukInventoryLauncher
         }
         string nodePath = Path.Combine(appRoot, "runtime", "node", "node.exe");
         string scriptPath = Path.Combine(appRoot, "scripts", "start-portable.mjs");
-        string dataDir = Path.Combine(
+        string localDataDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "ChungbukInventory");
+        string dataDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonDocuments),
             "ChungbukInventory");
 
         if (!File.Exists(nodePath))
@@ -72,7 +110,7 @@ internal static class ChungbukInventoryLauncher
 
         try
         {
-            MigrateLegacyUserData(nodePath, appRoot, dataDir);
+            MigrateToSharedUserData(nodePath, appRoot, dataDir, localDataDir, true);
             Directory.CreateDirectory(Path.Combine(dataDir, "backups"));
             if (OfferUpdateIfAvailable(appRoot, dataDir))
             {
@@ -157,37 +195,69 @@ internal static class ChungbukInventoryLauncher
         }
     }
 
-    private static void MigrateLegacyUserData(string nodePath, string appRoot, string dataDir)
+    private static void MigrateToSharedUserData(
+        string nodePath,
+        string appRoot,
+        string sharedDataDir,
+        string localDataDir,
+        bool showNotifications)
     {
         string legacyDir = Path.Combine(appRoot, "user-data");
-        string targetDatabase = Path.Combine(dataDir, "chungbuk-inventory.sqlite");
+        string targetDatabase = Path.Combine(sharedDataDir, "chungbuk-inventory.sqlite");
+        string localDatabase = Path.Combine(localDataDir, "chungbuk-inventory.sqlite");
         string legacyDatabase = Path.Combine(legacyDir, "chungbuk-inventory.sqlite");
+        string sourceDatabase = File.Exists(localDatabase) ? localDatabase : legacyDatabase;
+        string sourceMarker = Path.Combine(
+            Path.GetDirectoryName(sourceDatabase),
+            ".migrated-to-shared-data");
 
-        Directory.CreateDirectory(dataDir);
+        Directory.CreateDirectory(sharedDataDir);
         if (File.Exists(targetDatabase))
         {
             if (RunDatabaseValidation(nodePath, appRoot, targetDatabase))
             {
+                if (File.Exists(sourceDatabase) && !File.Exists(sourceMarker))
+                {
+                    throw new InvalidOperationException(
+                        "공용 데이터베이스와 현재 Windows 계정의 기존 데이터베이스가 모두 발견되었습니다.\n\n" +
+                        "공용: " + targetDatabase + "\n" +
+                        "현재 계정: " + sourceDatabase + "\n\n" +
+                        "두 파일을 모두 백업한 뒤 사용할 데이터베이스를 선택해 주세요.");
+                }
                 return;
             }
-            if (!File.Exists(legacyDatabase) ||
-                !RunDatabaseValidation(nodePath, appRoot, legacyDatabase))
+            if (!File.Exists(sourceDatabase) ||
+                !RunDatabaseValidation(nodePath, appRoot, sourceDatabase))
             {
                 throw new InvalidDataException(
-                    "현재 데이터베이스가 손상되었고 복구 가능한 이전 데이터베이스도 없습니다: " +
+                    "공용 데이터베이스가 손상되었고 복구 가능한 기존 데이터베이스도 없습니다: " +
                     targetDatabase);
             }
             string quarantined = targetDatabase + ".invalid-" + DateTime.Now.ToString("yyyyMMdd-HHmmss");
             File.Move(targetDatabase, quarantined);
         }
-        if (File.Exists(legacyDatabase))
+        if (File.Exists(sourceDatabase))
         {
-            RunDatabaseCopy(nodePath, appRoot, "migrate", legacyDatabase, targetDatabase);
-            MessageBox.Show(
-                "기존 재고 데이터를 안전한 Windows 사용자 데이터 폴더로 옮겼습니다.\n\n" + dataDir,
-                "충북 재고관리",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
+            if (!RunDatabaseValidation(nodePath, appRoot, sourceDatabase))
+            {
+                throw new InvalidDataException(
+                    "기존 데이터베이스를 확인할 수 없습니다: " + sourceDatabase);
+            }
+            RunDatabaseCopy(nodePath, appRoot, "migrate", sourceDatabase, targetDatabase);
+            File.WriteAllText(
+                sourceMarker,
+                "Migrated to " + targetDatabase + Environment.NewLine +
+                DateTime.Now.ToString("O"),
+                Encoding.UTF8);
+            if (showNotifications)
+            {
+                MessageBox.Show(
+                    "기존 재고 데이터를 두 Windows 계정이 함께 사용하는 공용 폴더로 안전하게 복사했습니다.\n\n" +
+                    sharedDataDir,
+                    "충북 재고관리",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+            }
         }
     }
 

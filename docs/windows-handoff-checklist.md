@@ -81,8 +81,8 @@ dist/chungbuk-inventory-portable-release.zip
 3. Run `ChungbukInventory.exe`.
 4. The browser opens after the local server starts.
 5. Use `현재 재고 가져오기` to import the user's current `재고현황` workbook.
-6. Keep the generated `user-data/` folder. It contains the real database and
-   backups after import.
+6. Keep `C:\Users\Public\Documents\ChungbukInventory`. It contains the shared
+   database and backups used by every Windows account on that computer.
 7. Give the user `docs/user-guide-ko.md` as the first-use guide.
 
 For the full Windows smoke-test procedure, use:
