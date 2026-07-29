@@ -125,8 +125,14 @@ jobs:
           $updateData = Join-Path $updateTestRoot "data"
           $updateArchive = Join-Path $updateTestRoot "candidate.zip"
           $successRestartMarker = Join-Path $updateTestRoot "success-restart.txt"
-          $externalUpdater = (Resolve-Path scripts/apply-windows-update.ps1).Path
+          $updaterSource = (Resolve-Path scripts/apply-windows-update.ps1).Path
+          $rollbackUpdater = Join-Path $updateTestRoot "rollback-updater.ps1"
+          $interruptUpdater = Join-Path $updateTestRoot "interrupt-updater.ps1"
+          $secondUpdater = Join-Path $updateTestRoot "second-updater.ps1"
           New-Item -ItemType Directory -Force $updateTestRoot, $updateData | Out-Null
+          Copy-Item $updaterSource $rollbackUpdater
+          Copy-Item $updaterSource $interruptUpdater
+          Copy-Item $updaterSource $secondUpdater
           Copy-Item dist/release-check $updateInstall -Recurse
           Set-Content (Join-Path $updateInstall "APP_VERSION") "0.2.0" -Encoding ascii
           $actualDataDir = Join-Path ([Environment]::GetFolderPath("CommonDocuments")) "ChungbukInventory"
@@ -244,7 +250,7 @@ jobs:
             -WorkingDirectory $updateTestRoot `
             -ArgumentList @(
               "-NoProfile",
-              "-File", $externalUpdater,
+              "-File", $rollbackUpdater,
               "-LauncherPid", "999999",
               "-ArchivePath", $brokenArchive,
               "-AppRoot", $rollbackInstall,
@@ -406,7 +412,7 @@ jobs:
           $interrupted = Start-Process pwsh `
             -ArgumentList @(
               "-NoProfile",
-              "-File", $externalUpdater,
+              "-File", $interruptUpdater,
               "-LauncherPid", "999999",
               "-ArchivePath", $interruptArchive,
               "-AppRoot", $interruptApp,
@@ -445,7 +451,7 @@ jobs:
           $secondAttempt = Start-Process pwsh `
             -ArgumentList @(
               "-NoProfile",
-              "-File", $externalUpdater,
+              "-File", $secondUpdater,
               "-LauncherPid", "999999",
               "-ArchivePath", $secondArchive,
               "-AppRoot", $secondInstall,
