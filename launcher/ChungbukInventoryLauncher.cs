@@ -71,19 +71,8 @@ internal static class ChungbukInventoryLauncher
             {
                 Environment.Exit(2);
             }
-            catch (Exception error)
+            catch
             {
-                try
-                {
-                    Directory.CreateDirectory(testDataDir);
-                    File.WriteAllText(
-                        Path.Combine(testDataDir, "updater-launch-error.log"),
-                        error.ToString());
-                }
-                catch
-                {
-                    // Preserve the original updater-launch failure exit code.
-                }
                 Environment.Exit(1);
             }
         }
@@ -105,8 +94,19 @@ internal static class ChungbukInventoryLauncher
                     !String.IsNullOrEmpty(testRestartMarker));
                 Environment.Exit(0);
             }
-            catch
+            catch (Exception error)
             {
+                try
+                {
+                    Directory.CreateDirectory(testDataDir);
+                    File.WriteAllText(
+                        Path.Combine(testDataDir, "updater-launch-error.log"),
+                        error.ToString());
+                }
+                catch
+                {
+                    // Preserve the original updater-launch failure exit code.
+                }
                 Environment.Exit(1);
             }
         }
