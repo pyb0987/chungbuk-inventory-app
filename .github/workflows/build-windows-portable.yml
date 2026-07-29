@@ -241,7 +241,7 @@ jobs:
           Remove-Item (Join-Path $brokenRoot "src/app/server.js")
           Compress-Archive (Join-Path $brokenRoot "*") $brokenArchive
           $negative = Start-Process pwsh `
-            -WorkingDirectory $rollbackInstall `
+            -WorkingDirectory $updateTestRoot `
             -ArgumentList @(
               "-NoProfile",
               "-File", $externalUpdater,
