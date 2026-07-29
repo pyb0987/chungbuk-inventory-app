@@ -135,8 +135,13 @@ GitHub의 `Build Windows portable app` 작업을 실행하면 Windows용 Node �
   게시하고 빌드 provenance attestation을 생성합니다.
 - 새 앱을 별도 폴더에 풀고 필수 파일과 버전을 검사한 뒤 폴더 단위로 교체합니다.
 - 새 실행 파일의 상태 검사가 실패하면 이전 앱 폴더로 자동 복구합니다.
+- 업데이트 도구는 교체 대상 폴더 밖에서 실행되며, 날짜별 성공·실패·복구 로그를
+  공용 데이터 폴더의 `logs`에 남깁니다.
+- 업데이트 도중 Windows가 종료되면 다음 로그인 때 외부 복구 도구가 남아 있는
+  이전 앱 폴더를 자동으로 정상 위치에 복구합니다.
 - Windows CI에서 완성된 `ChungbukInventory.exe`를 실제 시작 경로로 실행하고
-  `/api/state` 응답을 확인한 뒤 전체 프로세스를 종료합니다.
+  `/api/state` 응답을 확인합니다. 또한 설치 폴더를 작업 위치로 사용한 실제
+  실행 파일 → 업데이트 도구 인계, 교체 후 재실행, 실패 후 복구까지 검사합니다.
 
 ```text
 BUILD_WINDOWS_LAUNCHER.cmd

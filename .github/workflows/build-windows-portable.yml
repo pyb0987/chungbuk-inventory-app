@@ -116,48 +116,336 @@ jobs:
 
       - name: Exercise transactional Windows updater
         shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
-          Copy-Item dist/release-check dist/update-test-install -Recurse
-          Set-Content dist/update-test-install/APP_VERSION "0.2.0" -Encoding ascii
+          $expectedVersion = (Get-Content APP_VERSION -Raw).Trim()
+          $updateTestRoot = Join-Path $env:RUNNER_TEMP "chungbuk-updater-test"
+          $updateInstall = Join-Path $updateTestRoot "install path 공간"
+          $updateData = Join-Path $updateTestRoot "data"
+          $updateArchive = Join-Path $updateTestRoot "candidate.zip"
+          $successRestartMarker = Join-Path $updateTestRoot "success-restart.txt"
+          New-Item -ItemType Directory -Force $updateTestRoot, $updateData | Out-Null
+          Copy-Item dist/release-check $updateInstall -Recurse
+          Set-Content (Join-Path $updateInstall "APP_VERSION") "0.2.0" -Encoding ascii
           $actualDataDir = Join-Path ([Environment]::GetFolderPath("CommonDocuments")) "ChungbukInventory"
           New-Item -ItemType Directory -Force $actualDataDir | Out-Null
           Set-Content (Join-Path $actualDataDir "preserved.txt") "inventory-data" -Encoding ascii
-          Copy-Item dist/chungbuk-inventory-portable-release.zip dist/update-test.zip
-          ./scripts/apply-windows-update.ps1 `
-            -LauncherPid 999999 `
-            -ArchivePath dist/update-test.zip `
-            -AppRoot dist/update-test-install `
-            -ExpectedVersion ((Get-Content APP_VERSION -Raw).Trim()) `
-            -NoRestart
-          node scripts/verify-release-version.mjs dist/update-test-install ((Get-Content APP_VERSION -Raw).Trim())
+          Copy-Item dist/chungbuk-inventory-portable-release.zip $updateArchive
+
+          # Use the packaged launcher from inside the target directory. This exercises
+          # the production launcher -> detached updater handoff and inherited CWD risk.
+          $handoff = Start-Process `
+            -FilePath (Join-Path $updateInstall "ChungbukInventory.exe") `
+            -WorkingDirectory $updateInstall `
+            -ArgumentList @(
+              "--updater-launch-test",
+              $updateArchive,
+              $expectedVersion,
+              $updateData,
+              $successRestartMarker
+            ) `
+            -Wait `
+            -PassThru
+          if ($handoff.ExitCode -ne 0) { throw "Launcher could not start updater" }
+
+          $completed = $false
+          $deadline = (Get-Date).AddSeconds(90)
+          while ((Get-Date) -lt $deadline) {
+            $terminalLog = Get-ChildItem (Join-Path $updateData "logs") -Filter "update-*.log" -ErrorAction SilentlyContinue
+            if ((Test-Path $successRestartMarker) -and
+              ((Get-Content $successRestartMarker -Raw).Trim() -eq "success") -and
+              $terminalLog -and
+              (Select-String -Path $terminalLog.FullName -Pattern "success version=$expectedVersion" -Quiet)) {
+              $completed = $true
+              break
+            }
+            Start-Sleep -Milliseconds 500
+          }
+          if (-not $completed) {
+            throw "Updater did not reach terminal success and restart readiness"
+          }
+          node scripts/verify-release-version.mjs $updateInstall $expectedVersion
+          $updatedSmoke = Start-Process `
+            -FilePath (Join-Path $updateInstall "ChungbukInventory.exe") `
+            -ArgumentList "--smoke-test" `
+            -WorkingDirectory $updateInstall `
+            -Wait `
+            -PassThru
+          if ($updatedSmoke.ExitCode -ne 0) { throw "Updated installation did not start" }
+          $updateLog = Get-ChildItem (Join-Path $updateData "logs") -Filter "update-*.log"
+          if (-not $updateLog -or -not (Select-String -Path $updateLog.FullName -Pattern "success version=$expectedVersion")) {
+            throw "Updater did not retain a success log"
+          }
           if ((Get-Content (Join-Path $actualDataDir "preserved.txt") -Raw).Trim() -ne "inventory-data") {
             throw "External user data was changed"
           }
 
-          Copy-Item dist/release-check dist/rollback-test-install -Recurse
-          Set-Content dist/rollback-test-install/APP_VERSION "0.2.0" -Encoding ascii
-          Copy-Item dist/release-check dist/broken-after-swap -Recurse
-          Remove-Item dist/broken-after-swap/src/app/server.js
-          Compress-Archive dist/broken-after-swap/* dist/broken-after-swap.zip
+          $rollbackInstall = Join-Path $updateTestRoot "rollback-install"
+          $brokenRoot = Join-Path $updateTestRoot "broken-after-swap"
+          $brokenArchive = Join-Path $updateTestRoot "broken-after-swap.zip"
+          $rollbackLog = Join-Path $updateTestRoot "rollback.log"
+          $rollbackRestartMarker = Join-Path $updateTestRoot "rollback-restart.txt"
+          Copy-Item dist/release-check $rollbackInstall -Recurse
+          Set-Content (Join-Path $rollbackInstall "APP_VERSION") "0.2.0" -Encoding ascii
+          Copy-Item dist/release-check $brokenRoot -Recurse
+          Remove-Item (Join-Path $brokenRoot "src/app/server.js")
+          Compress-Archive (Join-Path $brokenRoot "*") $brokenArchive
           $negative = Start-Process pwsh `
+            -WorkingDirectory $rollbackInstall `
             -ArgumentList @(
               "-NoProfile",
-              "-File", "./scripts/apply-windows-update.ps1",
+              "-File", (Join-Path $rollbackInstall "scripts/apply-windows-update.ps1"),
               "-LauncherPid", "999999",
-              "-ArchivePath", "dist/broken-after-swap.zip",
-              "-AppRoot", "dist/rollback-test-install",
-              "-ExpectedVersion", ((Get-Content APP_VERSION -Raw).Trim()),
-              "-NoRestart"
+              "-ArchivePath", $brokenArchive,
+              "-AppRoot", $rollbackInstall,
+              "-ExpectedVersion", $expectedVersion,
+              "-LogPath", $rollbackLog,
+              "-RestartMarker", $rollbackRestartMarker,
+              "-NoDialogs"
             ) `
             -Wait -PassThru -NoNewWindow
           if ($negative.ExitCode -eq 0) { throw "Malformed update unexpectedly passed" }
-          if ((Get-Content dist/rollback-test-install/APP_VERSION -Raw).Trim() -ne "0.2.0") {
+          if ((Get-Content (Join-Path $rollbackInstall "APP_VERSION") -Raw).Trim() -ne "0.2.0") {
             throw "Rollback did not preserve previous installation"
           }
-          if (Test-Path dist/rollback-test-install/src/app/server.js -PathType Leaf) {
-            Write-Host "Post-swap health failure restored the complete previous installation"
-          } else {
+          if (-not (Test-Path (Join-Path $rollbackInstall "src/app/server.js") -PathType Leaf)) {
             throw "Rollback restored an incomplete installation"
+          }
+          if (-not (Select-String -Path $rollbackLog -Pattern "rollback=success")) {
+            throw "Rollback diagnostics were not retained"
+          }
+          if (-not (Select-String -Path $rollbackLog -Pattern "update-error=")) {
+            throw "Original update failure was not retained"
+          }
+          if (-not (Select-String -Path $rollbackLog -Pattern "phase=rolling-back")) {
+            throw "Rollback phase was not retained"
+          }
+          if (Select-String -Path $rollbackLog -Pattern "success version=" -Quiet) {
+            throw "Failed update was incorrectly logged as successful"
+          }
+          if (-not (Test-Path $rollbackRestartMarker) -or
+            ((Get-Content $rollbackRestartMarker -Raw).Trim() -ne "rollback")) {
+            throw "Updater did not restart the restored previous version"
+          }
+          $rollbackSmoke = Start-Process `
+            -FilePath (Join-Path $rollbackInstall "ChungbukInventory.exe") `
+            -ArgumentList "--smoke-test" `
+            -WorkingDirectory $rollbackInstall `
+            -Wait `
+            -PassThru
+          if ($rollbackSmoke.ExitCode -ne 0) { throw "Rolled-back installation did not start" }
+
+          # v0.2.9 is the one-time manual boundary because older releases contain
+          # the updater defect. Every later candidate must upgrade the exact latest
+          # immutable published artifact, not a current package with edited metadata.
+          if ([Version]$expectedVersion -gt [Version]"0.2.9") {
+            $headers = @{
+              Accept = "application/vnd.github+json"
+              "User-Agent" = "ChungbukInventory-CI"
+              Authorization = "Bearer $env:GITHUB_TOKEN"
+            }
+            $releases = Invoke-RestMethod `
+              -Headers $headers `
+              -Uri "https://api.github.com/repos/${{ github.repository }}/releases?per_page=100"
+            $previousRelease = $releases |
+              Where-Object {
+                -not $_.draft -and
+                -not $_.prerelease -and
+                [Version]$_.tag_name.TrimStart("v") -lt [Version]$expectedVersion
+              } |
+              Sort-Object { [Version]$_.tag_name.TrimStart("v") } -Descending |
+              Select-Object -First 1
+            if (-not $previousRelease) { throw "No earlier published release was found" }
+            $previousVersion = $previousRelease.tag_name.TrimStart("v")
+            $previousAsset = $previousRelease.assets |
+              Where-Object { $_.name -eq "chungbuk-inventory-portable-release.zip" } |
+              Select-Object -First 1
+            $previousManifestAsset = $previousRelease.assets |
+              Where-Object { $_.name -eq "release-manifest.json" } |
+              Select-Object -First 1
+            if (-not $previousAsset) { throw "Previous release package was not found" }
+            if (-not $previousManifestAsset) { throw "Previous release manifest was not found" }
+            if (-not ($previousRelease.PSObject.Properties.Name -contains "immutable") -or
+              -not $previousRelease.immutable) {
+              throw "Previous release is not immutable"
+            }
+
+            $previousZip = Join-Path $updateTestRoot "previous-release.zip"
+            $previousManifestPath = Join-Path $updateTestRoot "previous-release-manifest.json"
+            $previousInstall = Join-Path $updateTestRoot "previous-install"
+            $previousData = Join-Path $updateTestRoot "previous-data"
+            $previousRestartMarker = Join-Path $updateTestRoot "previous-restart.txt"
+            Invoke-WebRequest -Headers $headers $previousAsset.browser_download_url -OutFile $previousZip
+            Invoke-WebRequest -Headers $headers $previousManifestAsset.browser_download_url -OutFile $previousManifestPath
+            $previousManifest = Get-Content $previousManifestPath -Raw | ConvertFrom-Json
+            $previousSha = (Get-FileHash $previousZip -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($previousManifest.version -ne $previousVersion -or
+              $previousManifest.asset -ne "chungbuk-inventory-portable-release.zip" -or
+              $previousManifest.sha256 -ne $previousSha) {
+              throw "Previous release manifest verification failed"
+            }
+            Expand-Archive $previousZip -DestinationPath $previousInstall
+            New-Item -ItemType Directory -Force $previousData | Out-Null
+            Copy-Item dist/chungbuk-inventory-portable-release.zip $updateArchive -Force
+            $previousHandoff = Start-Process `
+              -FilePath (Join-Path $previousInstall "ChungbukInventory.exe") `
+              -WorkingDirectory $previousInstall `
+              -ArgumentList @(
+                "--updater-launch-test",
+                $updateArchive,
+                $expectedVersion,
+                $previousData,
+                $previousRestartMarker
+              ) `
+              -Wait `
+              -PassThru
+            if ($previousHandoff.ExitCode -ne 0) {
+              throw "Published v$previousVersion launcher could not start candidate update"
+            }
+            $previousCompleted = $false
+            $previousDeadline = (Get-Date).AddSeconds(90)
+            while ((Get-Date) -lt $previousDeadline) {
+              $previousLogs = Get-ChildItem (Join-Path $previousData "logs") -Filter "update-*.log" -ErrorAction SilentlyContinue
+              if ((Test-Path $previousRestartMarker) -and
+                ((Get-Content $previousRestartMarker -Raw).Trim() -eq "success") -and
+                $previousLogs -and
+                (Select-String -Path $previousLogs.FullName -Pattern "success version=$expectedVersion" -Quiet)) {
+                $previousCompleted = $true
+                break
+              }
+              Start-Sleep -Milliseconds 500
+            }
+            if (-not $previousCompleted) {
+              throw "Published v$previousVersion updater did not reach terminal success"
+            }
+            node scripts/verify-release-version.mjs $previousInstall $expectedVersion
+            $previousSmoke = Start-Process `
+              -FilePath (Join-Path $previousInstall "ChungbukInventory.exe") `
+              -ArgumentList "--smoke-test" `
+              -WorkingDirectory $previousInstall `
+              -Wait `
+              -PassThru
+            if ($previousSmoke.ExitCode -ne 0) {
+              throw "Installation upgraded from v$previousVersion did not start"
+            }
+          }
+
+          # Interrupt the production updater immediately after it moves the previous
+          # installation, then verify its real state, recovery copy, and persistent
+          # per-account startup recovery entry.
+          $interruptRoot = Join-Path $updateTestRoot "interruption"
+          $interruptApp = Join-Path $interruptRoot "install"
+          $interruptArchive = Join-Path $interruptRoot "candidate.zip"
+          $interruptLog = Join-Path $interruptRoot "recovery.log"
+          $recoveryRoot = Join-Path `
+            ([Environment]::GetFolderPath("CommonDocuments")) `
+            "ChungbukInventory\updater-recovery"
+          $interruptState = Join-Path $recoveryRoot "state.json"
+          $interruptRecoveryScript = Join-Path $recoveryRoot "recover.ps1"
+          New-Item -ItemType Directory -Force $interruptRoot | Out-Null
+          Copy-Item dist/release-check $interruptApp -Recurse
+          Set-Content (Join-Path $interruptApp "APP_VERSION") "0.2.0" -Encoding ascii
+          Copy-Item dist/chungbuk-inventory-portable-release.zip $interruptArchive
+          $interrupted = Start-Process pwsh `
+            -ArgumentList @(
+              "-NoProfile",
+              "-File", (Join-Path $interruptApp "scripts/apply-windows-update.ps1"),
+              "-LauncherPid", "999999",
+              "-ArchivePath", $interruptArchive,
+              "-AppRoot", $interruptApp,
+              "-ExpectedVersion", $expectedVersion,
+              "-LogPath", $interruptLog,
+              "-NoRestart",
+              "-NoDialogs",
+              "-TestExitAfterPreviousMove"
+            ) `
+            -Wait -PassThru -NoNewWindow
+          if ($interrupted.ExitCode -ne 86) {
+            throw "Updater interruption hook did not stop at the expected phase"
+          }
+          if (Test-Path $interruptApp) {
+            throw "Interruption did not occur after moving the previous installation"
+          }
+          if (-not (Test-Path $interruptState) -or -not (Test-Path $interruptRecoveryScript)) {
+            throw "Production updater did not retain recovery state and script"
+          }
+          $runOnceValue = Get-ItemPropertyValue `
+            -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" `
+            -Name "ChungbukInventoryUpdateRecovery"
+          if ($runOnceValue -notmatch "ChungbukInventory\\updater-recovery\\recover.ps1") {
+            throw "Production updater did not register the short recovery command"
+          }
+
+          # A second installation must not overwrite or clean up the pending
+          # machine-shared recovery state.
+          $pendingState = Get-Content $interruptState -Raw | ConvertFrom-Json
+          $secondInstall = Join-Path $interruptRoot "second-install"
+          $secondArchive = Join-Path $interruptRoot "second-candidate.zip"
+          $secondLog = Join-Path $interruptRoot "second-update.log"
+          Copy-Item dist/release-check $secondInstall -Recurse
+          Set-Content (Join-Path $secondInstall "APP_VERSION") "0.2.0" -Encoding ascii
+          Copy-Item dist/chungbuk-inventory-portable-release.zip $secondArchive
+          $secondAttempt = Start-Process pwsh `
+            -ArgumentList @(
+              "-NoProfile",
+              "-File", (Join-Path $secondInstall "scripts/apply-windows-update.ps1"),
+              "-LauncherPid", "999999",
+              "-ArchivePath", $secondArchive,
+              "-AppRoot", $secondInstall,
+              "-ExpectedVersion", $expectedVersion,
+              "-LogPath", $secondLog,
+              "-NoRestart",
+              "-NoDialogs"
+            ) `
+            -Wait -PassThru -NoNewWindow
+          if ($secondAttempt.ExitCode -eq 0) {
+            throw "A second update overwrote pending shared recovery state"
+          }
+          $stateAfterSecondAttempt = Get-Content $interruptState -Raw | ConvertFrom-Json
+          if ($stateAfterSecondAttempt.token -ne $pendingState.token) {
+            throw "A second updater changed another installation's recovery state"
+          }
+          & $interruptRecoveryScript -Recover -NoRestart
+          if (-not (Test-Path (Join-Path $interruptApp "ChungbukInventory.exe"))) {
+            throw "Interrupted update did not restore the canonical application root"
+          }
+          if (Test-Path $interruptState) {
+            throw "Successful interruption recovery retained stale state"
+          }
+          if (-not (Select-String -Path $interruptLog -Pattern "recovery=success")) {
+            throw "Interrupted update recovery did not retain terminal evidence"
+          }
+
+          # A crash while deleting a retired previous version must never replace a
+          # validated committed candidate with that now-incomplete previous tree.
+          $commitRoot = Join-Path $updateTestRoot "commit-interruption"
+          $commitToken = "0123456789abcdef0123456789abcdef"
+          $commitApp = Join-Path $commitRoot "install"
+          $commitPrevious = Join-Path $commitRoot ("ChungbukInventory-previous-" + $commitToken)
+          $partialPrevious = Join-Path $commitRoot ("ChungbukInventory-retired-" + $commitToken)
+          $commitState = Join-Path $commitRoot "state.json"
+          $commitLog = Join-Path $commitRoot "recovery.log"
+          New-Item -ItemType Directory -Force $commitRoot, $partialPrevious | Out-Null
+          Copy-Item dist/release-check $commitApp -Recurse
+          Set-Content (Join-Path $partialPrevious "APP_VERSION") "0.2.0" -Encoding ascii
+          @{
+            schema = 1
+            token = $commitToken
+            phase = "candidate-committed"
+            appRoot = $commitApp
+            stageRoot = (Join-Path $commitRoot ("ChungbukInventory-stage-" + $commitToken))
+            previousRoot = $commitPrevious
+            retiredRoot = $partialPrevious
+            failedRoot = (Join-Path $commitRoot ("ChungbukInventory-failed-" + $commitToken))
+            expectedVersion = $expectedVersion
+            logPath = $commitLog
+            recoveryScript = $interruptRecoveryScript
+          } | ConvertTo-Json | Set-Content $commitState -Encoding utf8
+          ./scripts/apply-windows-update.ps1 -RecoverState $commitState -NoRestart
+          node scripts/verify-release-version.mjs $commitApp $expectedVersion
+          if (-not (Select-String -Path $commitLog -Pattern "committed-candidate-retained")) {
+            throw "Commit-phase recovery did not retain the validated candidate"
           }
 
       - name: Attest Windows package provenance

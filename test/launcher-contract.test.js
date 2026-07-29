@@ -21,3 +21,14 @@ test("Windows launcher blocks unmarked per-account data when shared data already
   assert.match(launcher, /공용 데이터베이스와 현재 Windows 계정의 기존 데이터베이스가 모두 발견되었습니다/);
   assert.match(launcher, /--shared-migration-test/);
 });
+
+test("Windows launcher detaches the updater from the replaceable application directory", () => {
+  assert.match(launcher, /ChungbukInventory-updater-/);
+  assert.match(launcher, /info\.WorkingDirectory = safeWorkingDirectory/);
+  assert.match(launcher, /-LogPath/);
+  assert.match(launcher, /--updater-launch-test/);
+  assert.match(launcher, /--restart-marker/);
+  assert.match(launcher, /--restart-readiness-test/);
+  assert.match(launcher, /appRoot = appRoot\.TrimEnd/);
+  assert.match(launcher, /quoted\.Append\('\\\\', backslashes \* 2\)/);
+});

@@ -39,6 +39,20 @@ internal static class ChungbukInventoryLauncher
             string expected = commandLine.Length > 2 ? commandLine[2] : "";
             Environment.Exit(ValidatePackageRoot(appRoot, expected) ? 0 : 1);
         }
+        if (commandLine.Length > 3 && commandLine[1] == "--restart-marker")
+        {
+            File.WriteAllText(commandLine[2], commandLine[3], Encoding.ASCII);
+            Environment.Exit(0);
+        }
+        if (commandLine.Length > 3 && commandLine[1] == "--restart-readiness-test")
+        {
+            bool ready = RunPackagedStartupSmokeTest(appRoot);
+            File.WriteAllText(
+                commandLine[2],
+                ready ? commandLine[3] : "not-ready",
+                Encoding.ASCII);
+            Environment.Exit(ready ? 0 : 1);
+        }
         if (commandLine.Length > 3 && commandLine[1] == "--shared-migration-test")
         {
             string testSourceDir = commandLine[2];
@@ -56,6 +70,29 @@ internal static class ChungbukInventoryLauncher
             catch (InvalidOperationException)
             {
                 Environment.Exit(2);
+            }
+            catch
+            {
+                Environment.Exit(1);
+            }
+        }
+        if (commandLine.Length > 4 && commandLine[1] == "--updater-launch-test")
+        {
+            string testArchive = commandLine[2];
+            string testVersion = commandLine[3];
+            string testDataDir = commandLine[4];
+            string testRestartMarker = commandLine.Length > 5 ? commandLine[5] : null;
+            try
+            {
+                StartUpdater(
+                    appRoot,
+                    testDataDir,
+                    testArchive,
+                    testVersion,
+                    String.IsNullOrEmpty(testRestartMarker),
+                    testRestartMarker,
+                    !String.IsNullOrEmpty(testRestartMarker));
+                Environment.Exit(0);
             }
             catch
             {
@@ -316,7 +353,7 @@ internal static class ChungbukInventoryLauncher
                 File.Delete(archivePath);
                 throw new InvalidDataException("업데이트 파일의 SHA-256 검증에 실패했습니다.");
             }
-            StartUpdater(appRoot, archivePath, release.Version);
+            StartUpdater(appRoot, dataDir, archivePath, release.Version);
             return true;
         }
         catch (Exception error)
@@ -420,24 +457,59 @@ internal static class ChungbukInventoryLauncher
         }
     }
 
-    private static void StartUpdater(string appRoot, string archivePath, string expectedVersion)
+    private static void StartUpdater(
+        string appRoot,
+        string dataDir,
+        string archivePath,
+        string expectedVersion,
+        bool noRestart = false,
+        string restartMarker = null,
+        bool noDialogs = false)
     {
+        appRoot = appRoot.TrimEnd(
+            Path.DirectorySeparatorChar,
+            Path.AltDirectorySeparatorChar);
         string updaterPath = Path.Combine(appRoot, "scripts", "apply-windows-update.ps1");
         if (!File.Exists(updaterPath))
         {
             throw new FileNotFoundException("업데이트 도구가 없습니다.", updaterPath);
         }
+        string updaterCopy = Path.Combine(
+            Path.GetTempPath(),
+            "ChungbukInventory-updater-" + Guid.NewGuid().ToString("N") + ".ps1");
+        File.Copy(updaterPath, updaterCopy, false);
+        string logDir = Path.Combine(dataDir, "logs");
+        Directory.CreateDirectory(logDir);
+        string logPath = Path.Combine(
+            logDir,
+            "update-" + DateTime.Now.ToString("yyyy-MM-dd") + ".log");
+        string safeWorkingDirectory = Directory.GetParent(
+            appRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)).FullName;
+
         ProcessStartInfo info = new ProcessStartInfo();
         info.FileName = "powershell.exe";
         info.Arguments =
-            "-NoProfile -ExecutionPolicy Bypass -File " + Quote(updaterPath) +
+            "-NoProfile -ExecutionPolicy Bypass -File " + Quote(updaterCopy) +
             " -LauncherPid " + Process.GetCurrentProcess().Id +
             " -ArchivePath " + Quote(archivePath) +
             " -AppRoot " + Quote(appRoot) +
-            " -ExpectedVersion " + Quote(expectedVersion);
+            " -ExpectedVersion " + Quote(expectedVersion) +
+            " -LogPath " + Quote(logPath) +
+            (String.IsNullOrEmpty(restartMarker) ? "" : " -RestartMarker " + Quote(restartMarker)) +
+            (noDialogs ? " -NoDialogs" : "") +
+            (noRestart ? " -NoRestart" : "");
+        info.WorkingDirectory = safeWorkingDirectory;
         info.UseShellExecute = false;
         info.CreateNoWindow = true;
-        Process.Start(info);
+        try
+        {
+            Process.Start(info);
+        }
+        catch
+        {
+            File.Delete(updaterCopy);
+            throw;
+        }
     }
 
     private static void RunDatabaseCopy(
@@ -652,6 +724,34 @@ internal static class ChungbukInventoryLauncher
 
     private static string Quote(string value)
     {
-        return "\"" + value.Replace("\"", "\\\"") + "\"";
+        if (String.IsNullOrEmpty(value))
+        {
+            return "\"\"";
+        }
+
+        StringBuilder quoted = new StringBuilder();
+        quoted.Append('"');
+        int backslashes = 0;
+        foreach (char character in value)
+        {
+            if (character == '\\')
+            {
+                backslashes++;
+                continue;
+            }
+            if (character == '"')
+            {
+                quoted.Append('\\', backslashes * 2 + 1);
+                quoted.Append('"');
+                backslashes = 0;
+                continue;
+            }
+            quoted.Append('\\', backslashes);
+            backslashes = 0;
+            quoted.Append(character);
+        }
+        quoted.Append('\\', backslashes * 2);
+        quoted.Append('"');
+        return quoted.ToString();
     }
 }
