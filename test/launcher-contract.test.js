@@ -31,6 +31,7 @@ test("Windows launcher detaches the updater from the replaceable application dir
   assert.match(launcher, /--updater-launch-test/);
   assert.match(launcher, /--restart-marker/);
   assert.match(launcher, /--restart-readiness-test/);
+  assert.match(launcher, /validPackage && RunPackagedStartupSmokeTest/);
   assert.match(launcher, /appRoot = appRoot\.TrimEnd/);
   assert.match(launcher, /quoted\.Append\('\\\\', backslashes \* 2\)/);
 });

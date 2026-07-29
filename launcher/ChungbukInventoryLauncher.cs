@@ -37,7 +37,10 @@ internal static class ChungbukInventoryLauncher
         if (commandLine.Length > 1 && commandLine[1] == "--health-check")
         {
             string expected = commandLine.Length > 2 ? commandLine[2] : "";
-            Environment.Exit(ValidatePackageRoot(appRoot, expected) ? 0 : 1);
+            bool validPackage = ValidatePackageRoot(appRoot, expected);
+            bool startsSuccessfully =
+                validPackage && RunPackagedStartupSmokeTest(appRoot);
+            Environment.Exit(startsSuccessfully ? 0 : 1);
         }
         if (commandLine.Length > 3 && commandLine[1] == "--restart-marker")
         {
