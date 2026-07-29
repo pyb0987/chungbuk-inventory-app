@@ -130,6 +130,8 @@ GitHub의 `Build Windows portable app` 작업을 실행하면 Windows용 Node �
 - SQLite 백업 API로 WAL을 포함한 일관된 스냅샷을 만들고 무결성을 검사합니다.
 - 릴리스 태그, `APP_VERSION`, `package.json` 버전이 다르면 빌드를 중단합니다.
 - 다운로드한 zip은 GitHub Release의 SHA-256 매니페스트와 대조합니다.
+- 설치 폴더의 상위 위치가 보호되어 있으면 업데이트할 때만 Windows 관리자 권한
+  확인 창을 표시하고, 승인 후 같은 위치에서 업데이트를 계속합니다.
 - 릴리스는 게시 후 태그와 첨부 파일을 바꿀 수 없는 GitHub immutable release로
   게시하고 빌드 provenance attestation을 생성합니다.
 - 새 앱을 별도 폴더에 풀고 필수 파일과 버전을 검사한 뒤 폴더 단위로 교체합니다.

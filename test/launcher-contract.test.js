@@ -26,12 +26,22 @@ test("Windows launcher detaches the updater from the replaceable application dir
   assert.match(launcher, /ChungbukInventory-updater-/);
   assert.match(launcher, /new UTF8Encoding\(true\)/);
   assert.match(launcher, /info\.WorkingDirectory = safeWorkingDirectory/);
-  assert.match(launcher, /CHUNGBUK_UPDATER_LOG_PATH/);
-  assert.match(launcher, /CHUNGBUK_UPDATER_APP_ROOT/);
+  assert.match(launcher, /" -LogPath " \+ Quote\(logPath\)/);
+  assert.match(launcher, /" -AppRoot " \+ Quote\(appRoot\)/);
   assert.match(launcher, /--updater-launch-test/);
   assert.match(launcher, /--restart-marker/);
   assert.match(launcher, /--restart-readiness-test/);
   assert.match(launcher, /validPackage && RunPackagedStartupSmokeTest/);
   assert.match(launcher, /appRoot = appRoot\.TrimEnd/);
   assert.match(launcher, /quoted\.Append\('\\\\', backslashes \* 2\)/);
+});
+
+test("Windows launcher elevates updates only when the installation parent is protected", () => {
+  assert.match(launcher, /bool requiresElevation = !CanWriteToDirectory\(safeWorkingDirectory\)/);
+  assert.match(launcher, /info\.UseShellExecute = requiresElevation/);
+  assert.match(launcher, /info\.Verb = "runas"/);
+  assert.match(launcher, /-LauncherPid/);
+  assert.match(launcher, /-ArchivePath/);
+  assert.match(launcher, /-AppRoot/);
+  assert.match(launcher, /catch \(UnauthorizedAccessException\)/);
 });

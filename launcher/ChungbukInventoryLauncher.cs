@@ -525,31 +525,34 @@ internal static class ChungbukInventoryLauncher
             "update-" + DateTime.Now.ToString("yyyy-MM-dd") + ".log");
         string safeWorkingDirectory = Directory.GetParent(
             appRoot.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)).FullName;
+        bool requiresElevation = !CanWriteToDirectory(safeWorkingDirectory);
 
         ProcessStartInfo info = new ProcessStartInfo();
         info.FileName = "powershell.exe";
         info.Arguments =
-            "-NoProfile -ExecutionPolicy Bypass -File " + Quote(updaterCopy);
+            "-NoProfile -ExecutionPolicy Bypass -File " + Quote(updaterCopy) +
+            " -LauncherPid " + Process.GetCurrentProcess().Id +
+            " -ArchivePath " + Quote(archivePath) +
+            " -AppRoot " + Quote(appRoot) +
+            " -ExpectedVersion " + Quote(expectedVersion) +
+            " -LogPath " + Quote(logPath) +
+            (String.IsNullOrEmpty(restartMarker)
+                ? ""
+                : " -RestartMarker " + Quote(restartMarker)) +
+            (noDialogs ? " -NoDialogs" : "") +
+            (noRestart ? " -NoRestart" : "");
         info.WorkingDirectory = safeWorkingDirectory;
-        info.UseShellExecute = false;
-        info.CreateNoWindow = true;
-        if (!String.IsNullOrEmpty(diagnosticDir))
+        info.UseShellExecute = requiresElevation;
+        info.CreateNoWindow = !requiresElevation;
+        if (requiresElevation)
+        {
+            info.Verb = "runas";
+        }
+        else if (!String.IsNullOrEmpty(diagnosticDir))
         {
             info.RedirectStandardOutput = true;
             info.RedirectStandardError = true;
         }
-        info.EnvironmentVariables["CHUNGBUK_UPDATER_LAUNCHER_PID"] =
-            Process.GetCurrentProcess().Id.ToString();
-        info.EnvironmentVariables["CHUNGBUK_UPDATER_ARCHIVE_PATH"] = archivePath;
-        info.EnvironmentVariables["CHUNGBUK_UPDATER_APP_ROOT"] = appRoot;
-        info.EnvironmentVariables["CHUNGBUK_UPDATER_EXPECTED_VERSION"] = expectedVersion;
-        info.EnvironmentVariables["CHUNGBUK_UPDATER_LOG_PATH"] = logPath;
-        info.EnvironmentVariables["CHUNGBUK_UPDATER_RESTART_MARKER"] =
-            restartMarker ?? "";
-        info.EnvironmentVariables["CHUNGBUK_UPDATER_NO_DIALOGS"] =
-            noDialogs ? "1" : "";
-        info.EnvironmentVariables["CHUNGBUK_UPDATER_NO_RESTART"] =
-            noRestart ? "1" : "";
         try
         {
             return Process.Start(info);
@@ -558,6 +561,41 @@ internal static class ChungbukInventoryLauncher
         {
             File.Delete(updaterCopy);
             throw;
+        }
+    }
+
+    private static bool CanWriteToDirectory(string directory)
+    {
+        string probePath = Path.Combine(
+            directory,
+            "ChungbukInventory-write-test-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            File.WriteAllText(probePath, "ok", Encoding.ASCII);
+            File.Delete(probePath);
+            return true;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        finally
+        {
+            try
+            {
+                if (File.Exists(probePath))
+                {
+                    File.Delete(probePath);
+                }
+            }
+            catch
+            {
+                // A failed permission probe must not hide the UAC fallback.
+            }
         }
     }
 
