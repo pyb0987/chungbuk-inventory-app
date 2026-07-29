@@ -96,11 +96,21 @@ internal static class ChungbukInventoryLauncher
                     testVersion,
                     String.IsNullOrEmpty(testRestartMarker),
                     testRestartMarker,
-                    !String.IsNullOrEmpty(testRestartMarker));
+                    !String.IsNullOrEmpty(testRestartMarker),
+                    testDataDir);
                 File.WriteAllText(
                     Path.Combine(testDataDir, "updater-process-id.txt"),
                     updaterProcess.Id.ToString(),
                     Encoding.ASCII);
+                if (updaterProcess.WaitForExit(5000))
+                {
+                    File.WriteAllText(
+                        Path.Combine(testDataDir, "updater-process-exit.txt"),
+                        "exitCode=" + updaterProcess.ExitCode + Environment.NewLine +
+                        "stdout=" + updaterProcess.StandardOutput.ReadToEnd() + Environment.NewLine +
+                        "stderr=" + updaterProcess.StandardError.ReadToEnd(),
+                        Encoding.UTF8);
+                }
                 Environment.Exit(0);
             }
             catch (Exception error)
@@ -484,7 +494,8 @@ internal static class ChungbukInventoryLauncher
         string expectedVersion,
         bool noRestart = false,
         string restartMarker = null,
-        bool noDialogs = false)
+        bool noDialogs = false,
+        string diagnosticDir = null)
     {
         appRoot = appRoot.TrimEnd(
             Path.DirectorySeparatorChar,
@@ -513,6 +524,11 @@ internal static class ChungbukInventoryLauncher
         info.WorkingDirectory = safeWorkingDirectory;
         info.UseShellExecute = false;
         info.CreateNoWindow = true;
+        if (!String.IsNullOrEmpty(diagnosticDir))
+        {
+            info.RedirectStandardOutput = true;
+            info.RedirectStandardError = true;
+        }
         info.EnvironmentVariables["CHUNGBUK_UPDATER_LAUNCHER_PID"] =
             Process.GetCurrentProcess().Id.ToString();
         info.EnvironmentVariables["CHUNGBUK_UPDATER_ARCHIVE_PATH"] = archivePath;

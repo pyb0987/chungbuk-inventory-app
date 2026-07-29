@@ -179,7 +179,7 @@ jobs:
               Format-Table -AutoSize
             Write-Host "::endgroup::"
             Write-Host "::group::Updater logs"
-            Get-ChildItem $updateData -Filter "*.log" -Recurse -ErrorAction SilentlyContinue |
+            Get-ChildItem $updateData -File -Recurse -ErrorAction SilentlyContinue |
               ForEach-Object {
                 Write-Host "===== $($_.FullName) ====="
                 Get-Content $_.FullName -ErrorAction Continue
