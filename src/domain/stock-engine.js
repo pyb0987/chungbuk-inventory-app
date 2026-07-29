@@ -18,7 +18,7 @@ export const TransactionTypes = Object.freeze({
 });
 
 export const TransactionLabels = Object.freeze({
-  [TransactionTypes.PERSONAL_IN]: "입고",
+  [TransactionTypes.PERSONAL_IN]: "개인 반납",
   [TransactionTypes.PERSONAL_OUT]: "출고",
   [TransactionTypes.RETURN_TO_SEOUL]: "서울로 반납",
   [TransactionTypes.SEOUL_TO_PART_ROOM]: "서울에서 파트실로 택배",
@@ -32,6 +32,7 @@ export const TransactionLabels = Object.freeze({
 export const LegacyAliases = Object.freeze({
   "입고": TransactionTypes.PERSONAL_IN,
   "개인 입고": TransactionTypes.PERSONAL_IN,
+  "개인 반납": TransactionTypes.PERSONAL_IN,
   "출고": TransactionTypes.PERSONAL_OUT,
   "개인 출고": TransactionTypes.PERSONAL_OUT,
   "반납": TransactionTypes.RETURN_TO_SEOUL,

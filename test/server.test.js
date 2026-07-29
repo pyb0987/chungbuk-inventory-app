@@ -19,7 +19,7 @@ test("local app server serves UI state and records a transaction", async () => {
     assert.equal(initial.inventory.rows.length, 0);
     assert.deepEqual(
       initial.transactionTypes.map((entry) => entry.label),
-      ["개인 출고", "개인 입고", "개인 설치", "개인 회수", "서울로 반납", "서울에서 파트실로 택배", "사무실 출고", "사무실 입고"]
+      ["개인 출고", "개인 반납", "개인 설치", "개인 회수", "서울로 반납", "서울에서 파트실로 택배", "사무실 출고", "사무실 입고"]
     );
 
     const imported = await postJson(`${app.url}/api/import/current-stock`, {
@@ -56,6 +56,7 @@ test("local app server serves UI state and records a transaction", async () => {
     assert.equal(row.partRoomQuantity, 3);
     assert.equal(row.personHoldings["정상호"], 3);
     assert.equal(transaction.state.transactions[0].label, "출고");
+    assert.equal(transaction.state.transactions[0].serialText, "S-1");
 
     const installed = await postJson(`${app.url}/api/transactions`, {
       occurredOn: "2026-07-14",
@@ -126,6 +127,7 @@ test("local app server serves UI state and records a transaction", async () => {
     assert.equal(updatedRow.personHoldings["정상호"], 2);
     assert.equal(updatedTransaction.itemId, itemId);
     assert.equal(updatedTransaction.personId, personId);
+    assert.equal(updatedTransaction.serialText, "S-1");
     assert.equal(updatedTransaction.note, "server smoke edited");
     assert.equal(updated.state.auditLog[0].actionLabel, "수정");
     assert.match(updated.state.auditLog[0].afterSummary, /수량 1/);

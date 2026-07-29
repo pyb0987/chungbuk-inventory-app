@@ -491,7 +491,7 @@ function entryLabelForTransactionType(type) {
     return "개인 출고";
   }
   if (type === TransactionTypes.PERSONAL_IN) {
-    return "개인 입고";
+    return "개인 반납";
   }
   return TransactionLabels[type];
 }

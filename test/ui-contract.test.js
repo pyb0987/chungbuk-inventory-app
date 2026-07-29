@@ -17,7 +17,6 @@ test("static UI navigation buttons have matching view sections", () => {
     "dashboard",
     "inventory",
     "transactions",
-    "serials",
     "import",
     "backup",
     "audit"
@@ -33,8 +32,7 @@ test("static UI keeps the confirmed Korean inventory workflow labels", () => {
     "충북사무소 재고관리",
     "재고표",
     "입출고 입력",
-    "시리얼 등록",
-    "시리얼 목록",
+    "필요한 경우 입력",
     "수정 취소",
     "현재 재고 가져오기",
     "사용내역 가져오기",
@@ -81,19 +79,15 @@ test("client UI keeps confirmed movement previews and Korean-safe search", () =>
     "setStatus(`오류: ${error.message}`)",
     "if (errorTarget)",
     "state.transactionSearch = searchKey(event.target.value)",
-    "const text = searchKey([row.date, row.label, row.itemName, row.personName, row.note].join(\" \"))",
+    "row.serialText, row.note",
     "data-restore-transaction",
     "이 입출고 기록을 복원할까요?",
-    "data-restore-serial",
-    "이 시리얼 기록을 복원할까요?",
-    "data-edit-serial",
-    "enterSerialEditMode(Number(serialEditButton.dataset.editSerial))",
     "method: \"PATCH\"",
-    "시리얼 수정 저장",
-    "시리얼 수정됨",
+    'serialText: form.get("serialText")',
+    "elements.transactionForm.serialText.value = transaction.serialText ?? \"\"",
+    "elements.transactionForm.serialText.value = \"\"",
+    '<td>${escapeHtml(row.serialText ?? "")}</td>',
     "[\"삭제된 입출고\", dashboard.deletedTransactionCount]",
-    "[\"시리얼\", dashboard.activeSerialCount]",
-    "[\"삭제된 시리얼\", dashboard.deletedSerialCount]",
     "const recentBackup = state.data.dashboard.latestBackup",
     "elements.recentBackup.innerHTML = recentBackup",
     "renderImportRuns()",
@@ -108,16 +102,15 @@ test("client UI keeps confirmed movement previews and Korean-safe search", () =>
   }
 });
 
-test("item selection uses a combined searchable picker in transaction, adjustment, and serial forms", () => {
+test("item selection uses a combined searchable picker in transaction and adjustment forms", () => {
   const pickerNames = [...html.matchAll(/data-item-picker="([^"]+)"/g)].map(
     (match) => match[1]
   );
 
-  assert.deepEqual(pickerNames, ["adjustment", "transaction", "serial"]);
-  assert.equal([...html.matchAll(/<input name="itemId" type="hidden"/g)].length, 3);
+  assert.deepEqual(pickerNames, ["adjustment", "transaction"]);
+  assert.equal([...html.matchAll(/<input name="itemId" type="hidden"/g)].length, 2);
   assert.equal(html.includes('data-item-picker-list="adjustment"'), true);
   assert.equal(html.includes('data-item-picker-list="transaction"'), true);
-  assert.equal(html.includes('data-item-picker-list="serial"'), true);
 
   const requiredClientSnippets = [
     "renderItemPicker({",
@@ -126,7 +119,6 @@ test("item selection uses a combined searchable picker in transaction, adjustmen
     "fileNameFromPath(backup.filePath)",
     "setStatus(\"품목을 선택하세요\")",
     "이 입출고 기록을 삭제할까요?",
-    "이 시리얼 기록을 삭제할까요?",
     "renderRestoreSuccess(payload.restore)",
     "fileNameFromPath(beforeRestoreBackup.filePath)"
   ];
@@ -134,6 +126,21 @@ test("item selection uses a combined searchable picker in transaction, adjustmen
   for (const snippet of requiredClientSnippets) {
     assert.equal(appJs.includes(snippet), true, `missing picker contract: ${snippet}`);
   }
+});
+
+test("standalone serial management is hidden while transaction serial entry remains", () => {
+  assert.equal(html.includes('data-view="serials"'), false);
+  assert.equal(html.includes('id="view-serials"'), false);
+  assert.equal(html.includes('id="serial-form"'), false);
+  assert.equal(html.includes('id="serial-table"'), false);
+  assert.equal(
+    /id="transaction-form"[\s\S]*?<input name="serialText"/.test(html),
+    true
+  );
+  assert.equal(
+    /id="transaction-table"/.test(html) && html.includes("<th>시리얼</th>"),
+    true
+  );
 });
 
 function escapeRegExp(value) {

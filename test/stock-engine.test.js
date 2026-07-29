@@ -24,7 +24,7 @@ test("개인 출고 moves stock from part room to selected person", () => {
   assert.equal(totalForItem(next, 1), 3);
 });
 
-test("개인 입고 moves stock from selected person back to part room", () => {
+test("개인 반납 moves stock from selected person back to part room", () => {
   const stock = new Map([
     [stockKey(1, Buckets.PART_ROOM), 1],
     [stockKey(1, Buckets.PERSON, 10), 2]
@@ -135,6 +135,8 @@ test("negative internal stock is blocked", () => {
 });
 
 test("legacy labels normalize to confirmed transaction types", () => {
+  assert.equal(normalizeTransactionType("개인 반납"), TransactionTypes.PERSONAL_IN);
+  assert.equal(normalizeTransactionType("개인 입고"), TransactionTypes.PERSONAL_IN);
   assert.equal(normalizeTransactionType("반납"), TransactionTypes.RETURN_TO_SEOUL);
   assert.equal(
     normalizeTransactionType("서울_파트실_택배"),

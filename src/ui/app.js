@@ -4,11 +4,8 @@ const state = {
   inventorySearch: "",
   itemSearch: "",
   adjustmentItemSearch: "",
-  serialItemSearch: "",
   transactionSearch: "",
-  serialSearch: "",
-  editingTransactionId: null,
-  editingSerialId: null
+  editingTransactionId: null
 };
 
 const movementText = {
@@ -44,9 +41,6 @@ const elements = {
   personForm: document.querySelector("#person-form"),
   itemTable: document.querySelector("#item-table"),
   personTable: document.querySelector("#person-table"),
-  serialForm: document.querySelector("#serial-form"),
-  serialTable: document.querySelector("#serial-table"),
-  serialSearch: document.querySelector("#serial-search"),
   importForm: document.querySelector("#import-form"),
   importResult: document.querySelector("#import-result"),
   usageImportForm: document.querySelector("#usage-import-form"),
@@ -65,8 +59,7 @@ const elements = {
   adjustmentPreview: document.querySelector("#adjustment-preview"),
   inventorySearch: document.querySelector("#inventory-search"),
   transactionSearch: document.querySelector("#transaction-search"),
-  cancelTransactionEdit: document.querySelector("#cancel-transaction-edit"),
-  cancelSerialEdit: document.querySelector("#cancel-serial-edit")
+  cancelTransactionEdit: document.querySelector("#cancel-transaction-edit")
 };
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -100,11 +93,6 @@ function setupForms() {
   elements.transactionSearch.addEventListener("input", (event) => {
     state.transactionSearch = searchKey(event.target.value);
     renderTransactions();
-  });
-
-  elements.serialSearch.addEventListener("input", (event) => {
-    state.serialSearch = searchKey(event.target.value);
-    renderSerials();
   });
 
   elements.auditSearch.addEventListener("input", () => {
@@ -168,6 +156,7 @@ function setupForms() {
         itemId: form.get("itemId"),
         personId: form.get("personId"),
         quantity: form.get("quantity"),
+        serialText: form.get("serialText"),
         note: form.get("note")
       };
       if (editingId) {
@@ -209,48 +198,6 @@ function setupForms() {
       setStatus("개인 추가됨");
     });
   });
-
-  elements.serialForm.itemSearch.addEventListener("input", (event) => {
-    state.serialItemSearch = searchKey(event.target.value);
-    elements.serialForm.itemId.value = "";
-    renderSerialControls();
-  });
-
-  elements.serialForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    await runUiAction(async () => {
-      const form = new FormData(elements.serialForm);
-      if (!form.get("itemId")) {
-        setStatus("품목을 선택하세요");
-        return;
-      }
-      const editingId = form.get("editingId");
-      const payload = {
-        itemId: form.get("itemId"),
-        serialText: form.get("serialText"),
-        holderText: form.get("holderText"),
-        note: form.get("note")
-      };
-      if (editingId) {
-        await apiRequest(`/api/serials/${editingId}`, {
-          method: "PATCH",
-          body: { ...payload, reason: "화면에서 시리얼 수정" }
-        });
-        clearSerialEditMode();
-        setStatus("시리얼 수정됨");
-      } else {
-        await apiRequest("/api/serials", {
-          method: "POST",
-          body: payload
-        });
-        resetSerialFormForNewEntry();
-        renderSerialControls();
-        setStatus("시리얼 저장됨");
-      }
-    });
-  });
-
-  elements.cancelSerialEdit.addEventListener("click", clearSerialEditMode);
 
   elements.importForm.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -480,8 +427,6 @@ function render() {
   renderAdjustmentControls();
   renderMasterDataTables();
   renderTransactions();
-  renderSerialControls();
-  renderSerials();
   renderImportRuns();
   renderLegacyUsageRecords();
   renderBackups();
@@ -499,8 +444,6 @@ function renderMetrics() {
     ["서울에서 파트실로 택배", dashboard.seoulReceivedCount],
     ["입출고", dashboard.activeTransactionCount],
     ["삭제된 입출고", dashboard.deletedTransactionCount],
-    ["시리얼", dashboard.activeSerialCount],
-    ["삭제된 시리얼", dashboard.deletedSerialCount],
     ["백업", dashboard.backupCount]
   ];
   elements.metrics.innerHTML = metrics
@@ -664,17 +607,6 @@ function renderAdjustmentControls() {
   updateAdjustmentFormState();
 }
 
-function renderSerialControls() {
-  const selectedItemId = elements.serialForm.itemId.value;
-  renderItemPicker({
-    form: elements.serialForm,
-    picker: "serial",
-    search: state.serialItemSearch,
-    selectedItemId
-  });
-  renderSerialEditMode();
-}
-
 function renderItemPicker({ form, picker, search, selectedItemId }) {
   const input = form.itemSearch;
   const hiddenInput = form.itemId;
@@ -785,7 +717,9 @@ function renderMasterDataRow(record, kind) {
 function renderTransactions() {
   const term = state.transactionSearch;
   const rows = state.data.transactions.filter((row) => {
-    const text = searchKey([row.date, row.label, row.itemName, row.personName, row.note].join(" "));
+    const text = searchKey(
+      [row.date, row.label, row.itemName, row.personName, row.serialText, row.note].join(" ")
+    );
     return text.includes(term);
   });
 
@@ -799,13 +733,14 @@ function renderTransactions() {
               <td>${escapeHtml(row.itemName)}</td>
               <td>${escapeHtml(row.personName)}</td>
               <td class="number">${formatNumber(row.quantity)}</td>
+              <td>${escapeHtml(row.serialText ?? "")}</td>
               <td>${escapeHtml(row.note ?? "")}</td>
               <td>${renderTransactionStatus(row)}</td>
               <td>${renderTransactionActions(row)}</td>
             </tr>`
         )
         .join("")
-    : emptyRow(8, "입출고 기록 없음");
+    : emptyRow(9, "입출고 기록 없음");
 }
 
 function renderTransactionStatus(row) {
@@ -844,39 +779,6 @@ function renderBackups() {
         )
         .join("")
     : emptyRow(6, "백업 없음");
-}
-
-function renderSerials() {
-  const rows = state.data.serials.filter((row) =>
-    searchKey([row.itemName, row.serialText, row.holderText, row.note].join(" ")).includes(
-      state.serialSearch
-    )
-  );
-
-  elements.serialTable.innerHTML = rows.length
-    ? rows
-        .map(
-          (row) => `
-            <tr class="${row.isActive ? "" : "deleted"}">
-              <td>${escapeHtml(row.itemName)}</td>
-              <td>${escapeHtml(row.serialText)}</td>
-              <td>${escapeHtml(row.holderText ?? "")}</td>
-              <td>${escapeHtml(row.note ?? "")}</td>
-              <td>${row.isActive ? '<span class="badge">사용</span>' : '<span class="badge deleted">삭제됨</span>'}</td>
-              <td>${renderSerialActions(row)}</td>
-            </tr>`
-        )
-        .join("")
-    : emptyRow(6, "시리얼 기록 없음");
-}
-
-function renderSerialActions(row) {
-  return row.isActive
-    ? `<div class="action-group">
-        <button class="secondary-button" type="button" data-edit-serial="${row.id}">수정</button>
-        <button class="danger-button" type="button" data-delete-serial="${row.id}">삭제</button>
-      </div>`
-    : `<button class="secondary-button" type="button" data-restore-serial="${row.id}">복원</button>`;
 }
 
 function renderAuditLog() {
@@ -959,44 +861,6 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
-  const serialEditButton = event.target.closest("[data-edit-serial]");
-  if (serialEditButton) {
-    enterSerialEditMode(Number(serialEditButton.dataset.editSerial));
-    return;
-  }
-
-  const serialButton = event.target.closest("[data-delete-serial]");
-  if (serialButton) {
-    const confirmed = window.confirm("이 시리얼 기록을 삭제할까요? 기존 기록은 삭제됨 상태로 보관됩니다.");
-    if (!confirmed) {
-      return;
-    }
-    await runUiAction(async () => {
-      await apiRequest(`/api/serials/${serialButton.dataset.deleteSerial}`, {
-        method: "DELETE",
-        body: { reason: "화면에서 시리얼 삭제" }
-      });
-      setStatus("시리얼 삭제됨");
-    });
-    return;
-  }
-
-  const serialRestoreButton = event.target.closest("[data-restore-serial]");
-  if (serialRestoreButton) {
-    const confirmed = window.confirm("이 시리얼 기록을 복원할까요?");
-    if (!confirmed) {
-      return;
-    }
-    await runUiAction(async () => {
-      await apiRequest(`/api/serials/${serialRestoreButton.dataset.restoreSerial}/restore`, {
-        method: "POST",
-        body: { reason: "화면에서 시리얼 복원" }
-      });
-      setStatus("시리얼 복원됨");
-    });
-    return;
-  }
-
   const restoreBackupButton = event.target.closest("[data-restore-backup]");
   if (restoreBackupButton) {
     const confirmed = window.confirm("현재 데이터가 선택한 백업으로 교체됩니다. 계속할까요?");
@@ -1037,7 +901,6 @@ document.addEventListener("click", async (event) => {
 function selectItemFromPicker(picker, itemId) {
   const forms = {
     adjustment: elements.adjustmentForm,
-    serial: elements.serialForm,
     transaction: elements.transactionForm
   };
   const form = forms[picker];
@@ -1050,9 +913,6 @@ function selectItemFromPicker(picker, itemId) {
   if (picker === "adjustment") {
     state.adjustmentItemSearch = "";
     renderAdjustmentControls();
-  } else if (picker === "serial") {
-    state.serialItemSearch = "";
-    renderSerialControls();
   } else {
     state.itemSearch = "";
     renderTransactionControls();
@@ -1109,6 +969,7 @@ function enterTransactionEditMode(id) {
   elements.transactionForm.itemSearch.value = transaction.itemName;
   elements.transactionForm.personId.value = transaction.personId ? String(transaction.personId) : "";
   elements.transactionForm.quantity.value = transaction.quantity;
+  elements.transactionForm.serialText.value = transaction.serialText ?? "";
   elements.transactionForm.note.value = transaction.note ?? "";
   renderTransactionControls();
   elements.transactionForm.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1130,37 +991,9 @@ function renderTransactionEditMode() {
   }
 }
 
-function enterSerialEditMode(id) {
-  const serial = state.data.serials.find((row) => row.id === id);
-  if (!serial || !serial.isActive) {
-    return;
-  }
-  state.editingSerialId = id;
-  state.serialItemSearch = "";
-  elements.serialForm.editingId.value = String(id);
-  elements.serialForm.itemId.value = String(serial.itemId);
-  elements.serialForm.itemSearch.value = serial.itemName;
-  elements.serialForm.serialText.value = serial.serialText;
-  elements.serialForm.holderText.value = serial.holderText ?? "";
-  elements.serialForm.note.value = serial.note ?? "";
-  renderSerialControls();
-  elements.serialForm.scrollIntoView({ behavior: "smooth", block: "start" });
-}
-
-function clearSerialEditMode() {
-  state.editingSerialId = null;
-  resetSerialFormForNewEntry();
-  renderSerialControls();
-}
-
-function renderSerialEditMode() {
-  const isEditing = Boolean(state.editingSerialId);
-  elements.cancelSerialEdit.classList.toggle("hidden", !isEditing);
-  elements.serialForm.submitButton.textContent = isEditing ? "시리얼 수정 저장" : "시리얼 저장";
-}
-
 function resetTransactionFormFields() {
   elements.transactionForm.quantity.value = "";
+  elements.transactionForm.serialText.value = "";
   elements.transactionForm.note.value = "";
 }
 
@@ -1173,17 +1006,6 @@ function resetTransactionFormForNewEntry() {
   elements.transactionForm.itemId.value = "";
   elements.transactionForm.personId.value = "";
   resetTransactionFormFields();
-}
-
-function resetSerialFormForNewEntry() {
-  state.editingSerialId = null;
-  state.serialItemSearch = "";
-  elements.serialForm.editingId.value = "";
-  elements.serialForm.itemSearch.value = "";
-  elements.serialForm.itemId.value = "";
-  elements.serialForm.serialText.value = "";
-  elements.serialForm.holderText.value = "";
-  elements.serialForm.note.value = "";
 }
 
 function searchKey(value) {
