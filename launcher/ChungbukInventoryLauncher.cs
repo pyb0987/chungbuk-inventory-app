@@ -89,7 +89,7 @@ internal static class ChungbukInventoryLauncher
                     Path.Combine(testDataDir, "updater-launch-entered.log"),
                     String.Join(Environment.NewLine, commandLine),
                     Encoding.UTF8);
-                StartUpdater(
+                Process updaterProcess = StartUpdater(
                     appRoot,
                     testDataDir,
                     testArchive,
@@ -97,6 +97,10 @@ internal static class ChungbukInventoryLauncher
                     String.IsNullOrEmpty(testRestartMarker),
                     testRestartMarker,
                     !String.IsNullOrEmpty(testRestartMarker));
+                File.WriteAllText(
+                    Path.Combine(testDataDir, "updater-process-id.txt"),
+                    updaterProcess.Id.ToString(),
+                    Encoding.ASCII);
                 Environment.Exit(0);
             }
             catch (Exception error)
@@ -473,7 +477,7 @@ internal static class ChungbukInventoryLauncher
         }
     }
 
-    private static void StartUpdater(
+    private static Process StartUpdater(
         string appRoot,
         string dataDir,
         string archivePath,
@@ -519,7 +523,7 @@ internal static class ChungbukInventoryLauncher
         info.CreateNoWindow = true;
         try
         {
-            Process.Start(info);
+            return Process.Start(info);
         }
         catch
         {

@@ -195,6 +195,16 @@ jobs:
               Get-Content $recoveryState -Raw
             }
             Write-Host "::endgroup::"
+            $updaterPidFile = Join-Path $updateData "updater-process-id.txt"
+            if (Test-Path $updaterPidFile) {
+              $updaterPid = [int](Get-Content $updaterPidFile -Raw)
+              $updaterProcess = Get-Process -Id $updaterPid -ErrorAction SilentlyContinue
+              if ($updaterProcess) {
+                Write-Host "Updater process is still running: pid=$updaterPid path=$($updaterProcess.Path)"
+              } else {
+                Write-Host "Updater process exited: pid=$updaterPid"
+              }
+            }
             $installedVersionFile = Join-Path $updateInstall "APP_VERSION"
             if (Test-Path $installedVersionFile) {
               Write-Host "Installed APP_VERSION: $((Get-Content $installedVersionFile -Raw).Trim())"
