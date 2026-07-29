@@ -163,6 +163,34 @@ jobs:
             Start-Sleep -Milliseconds 500
           }
           if (-not $completed) {
+            Write-Host "::group::Updater diagnostic files"
+            Get-ChildItem $updateTestRoot -Recurse -Force -ErrorAction SilentlyContinue |
+              Select-Object FullName, Length, LastWriteTime |
+              Format-Table -AutoSize
+            Write-Host "::endgroup::"
+            Write-Host "::group::Updater logs"
+            Get-ChildItem (Join-Path $updateData "logs") -Filter "update-*.log" -ErrorAction SilentlyContinue |
+              ForEach-Object {
+                Write-Host "===== $($_.FullName) ====="
+                Get-Content $_.FullName -ErrorAction Continue
+              }
+            Write-Host "::endgroup::"
+            $recoveryRoot = Join-Path $actualDataDir "updater-recovery"
+            Write-Host "::group::Updater recovery state"
+            Get-ChildItem $recoveryRoot -Recurse -Force -ErrorAction SilentlyContinue |
+              Select-Object FullName, Length, LastWriteTime |
+              Format-Table -AutoSize
+            $recoveryState = Join-Path $recoveryRoot "state.json"
+            if (Test-Path $recoveryState) {
+              Get-Content $recoveryState -Raw
+            }
+            Write-Host "::endgroup::"
+            $installedVersionFile = Join-Path $updateInstall "APP_VERSION"
+            if (Test-Path $installedVersionFile) {
+              Write-Host "Installed APP_VERSION: $((Get-Content $installedVersionFile -Raw).Trim())"
+            } else {
+              Write-Host "Installed APP_VERSION is missing"
+            }
             throw "Updater did not reach terminal success and restart readiness"
           }
           node scripts/verify-release-version.mjs $updateInstall $expectedVersion
