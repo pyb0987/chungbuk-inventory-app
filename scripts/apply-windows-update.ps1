@@ -12,6 +12,31 @@ param(
   [switch]$TestExitAfterPreviousMove
 )
 
+if (-not $LauncherPid -and $env:CHUNGBUK_UPDATER_LAUNCHER_PID) {
+  $LauncherPid = [int]$env:CHUNGBUK_UPDATER_LAUNCHER_PID
+}
+if (-not $ArchivePath) {
+  $ArchivePath = $env:CHUNGBUK_UPDATER_ARCHIVE_PATH
+}
+if (-not $AppRoot) {
+  $AppRoot = $env:CHUNGBUK_UPDATER_APP_ROOT
+}
+if (-not $ExpectedVersion) {
+  $ExpectedVersion = $env:CHUNGBUK_UPDATER_EXPECTED_VERSION
+}
+if (-not $LogPath) {
+  $LogPath = $env:CHUNGBUK_UPDATER_LOG_PATH
+}
+if (-not $RestartMarker) {
+  $RestartMarker = $env:CHUNGBUK_UPDATER_RESTART_MARKER
+}
+if ($env:CHUNGBUK_UPDATER_NO_DIALOGS -eq "1") {
+  $NoDialogs = $true
+}
+if ($env:CHUNGBUK_UPDATER_NO_RESTART -eq "1") {
+  $NoRestart = $true
+}
+
 $ErrorActionPreference = "Stop"
 $startupRunPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
 $startupRunName = "ChungbukInventoryUpdateRecovery"

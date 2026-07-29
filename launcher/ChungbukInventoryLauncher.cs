@@ -509,18 +509,22 @@ internal static class ChungbukInventoryLauncher
         ProcessStartInfo info = new ProcessStartInfo();
         info.FileName = "powershell.exe";
         info.Arguments =
-            "-NoProfile -ExecutionPolicy Bypass -File " + Quote(updaterCopy) +
-            " -LauncherPid " + Process.GetCurrentProcess().Id +
-            " -ArchivePath " + Quote(archivePath) +
-            " -AppRoot " + Quote(appRoot) +
-            " -ExpectedVersion " + Quote(expectedVersion) +
-            " -LogPath " + Quote(logPath) +
-            (String.IsNullOrEmpty(restartMarker) ? "" : " -RestartMarker " + Quote(restartMarker)) +
-            (noDialogs ? " -NoDialogs" : "") +
-            (noRestart ? " -NoRestart" : "");
+            "-NoProfile -ExecutionPolicy Bypass -File " + Quote(updaterCopy);
         info.WorkingDirectory = safeWorkingDirectory;
         info.UseShellExecute = false;
         info.CreateNoWindow = true;
+        info.EnvironmentVariables["CHUNGBUK_UPDATER_LAUNCHER_PID"] =
+            Process.GetCurrentProcess().Id.ToString();
+        info.EnvironmentVariables["CHUNGBUK_UPDATER_ARCHIVE_PATH"] = archivePath;
+        info.EnvironmentVariables["CHUNGBUK_UPDATER_APP_ROOT"] = appRoot;
+        info.EnvironmentVariables["CHUNGBUK_UPDATER_EXPECTED_VERSION"] = expectedVersion;
+        info.EnvironmentVariables["CHUNGBUK_UPDATER_LOG_PATH"] = logPath;
+        info.EnvironmentVariables["CHUNGBUK_UPDATER_RESTART_MARKER"] =
+            restartMarker ?? "";
+        info.EnvironmentVariables["CHUNGBUK_UPDATER_NO_DIALOGS"] =
+            noDialogs ? "1" : "";
+        info.EnvironmentVariables["CHUNGBUK_UPDATER_NO_RESTART"] =
+            noRestart ? "1" : "";
         try
         {
             return Process.Start(info);
