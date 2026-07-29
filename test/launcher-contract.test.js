@@ -24,6 +24,7 @@ test("Windows launcher blocks unmarked per-account data when shared data already
 
 test("Windows launcher detaches the updater from the replaceable application directory", () => {
   assert.match(launcher, /ChungbukInventory-updater-/);
+  assert.match(launcher, /new UTF8Encoding\(true\)/);
   assert.match(launcher, /info\.WorkingDirectory = safeWorkingDirectory/);
   assert.match(launcher, /CHUNGBUK_UPDATER_LOG_PATH/);
   assert.match(launcher, /CHUNGBUK_UPDATER_APP_ROOT/);

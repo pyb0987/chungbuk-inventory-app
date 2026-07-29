@@ -508,7 +508,13 @@ internal static class ChungbukInventoryLauncher
         string updaterCopy = Path.Combine(
             Path.GetTempPath(),
             "ChungbukInventory-updater-" + Guid.NewGuid().ToString("N") + ".ps1");
-        File.Copy(updaterPath, updaterCopy, false);
+        // Windows PowerShell 5 interprets UTF-8 without a BOM as the legacy
+        // system code page. Re-encode the detached copy so Korean diagnostics
+        // cannot be corrupted into PowerShell syntax errors.
+        File.WriteAllText(
+            updaterCopy,
+            File.ReadAllText(updaterPath, Encoding.UTF8),
+            new UTF8Encoding(true));
         string logDir = Path.Combine(dataDir, "logs");
         Directory.CreateDirectory(logDir);
         string logPath = Path.Combine(
