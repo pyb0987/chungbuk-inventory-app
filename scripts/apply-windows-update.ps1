@@ -60,16 +60,20 @@ function Write-SafeLog([string]$Path, [string]$Token, [string]$Message) {
 
 function Write-AtomicState([string]$Path, [hashtable]$State) {
   $temporary = $Path + ".tmp-" + [Guid]::NewGuid().ToString("N")
+  $backup = $Path + ".bak-" + [Guid]::NewGuid().ToString("N")
   try {
     $State.updatedAt = (Get-Date).ToString("o")
     $State | ConvertTo-Json | Set-Content -LiteralPath $temporary -Encoding utf8
     if (Test-Path -LiteralPath $Path) {
-      [IO.File]::Replace($temporary, $Path, $null)
+      # .NET Framework's File.Replace rejects a null backup path even though
+      # newer runtimes accept it.
+      [IO.File]::Replace($temporary, $Path, $backup)
     } else {
       [IO.File]::Move($temporary, $Path)
     }
   } finally {
     Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $backup -Force -ErrorAction SilentlyContinue
   }
 }
 
