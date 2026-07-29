@@ -205,6 +205,7 @@ function Remove-RecoveryArtifacts([string]$StatePath, [string]$RecoveryScriptPat
 function Invoke-InterruptedUpdateRecovery([string]$StatePath) {
   $state = $null
   $parent = $defaultRecoveryRoot
+  $originalLocation = (Get-Location).Path
   try {
     if (-not (Test-Path -LiteralPath $StatePath -PathType Leaf)) {
       Clear-RecoveryRegistration
@@ -281,6 +282,7 @@ function Invoke-InterruptedUpdateRecovery([string]$StatePath) {
       $script:lockStream.Dispose()
       $script:lockStream = $null
     }
+    Set-Location -LiteralPath $originalLocation
   }
 }
 
