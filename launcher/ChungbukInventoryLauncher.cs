@@ -84,6 +84,11 @@ internal static class ChungbukInventoryLauncher
             string testRestartMarker = commandLine.Length > 5 ? commandLine[5] : null;
             try
             {
+                Directory.CreateDirectory(testDataDir);
+                File.WriteAllText(
+                    Path.Combine(testDataDir, "updater-launch-entered.log"),
+                    String.Join(Environment.NewLine, commandLine),
+                    Encoding.UTF8);
                 StartUpdater(
                     appRoot,
                     testDataDir,

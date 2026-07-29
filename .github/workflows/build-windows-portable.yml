@@ -154,6 +154,10 @@ jobs:
             }
             throw "Launcher could not start updater"
           }
+          $launchEntered = Join-Path $updateData "updater-launch-entered.log"
+          if (-not (Test-Path $launchEntered)) {
+            throw "Launcher did not enter updater test mode"
+          }
 
           $completed = $false
           $deadline = (Get-Date).AddSeconds(90)
@@ -175,7 +179,7 @@ jobs:
               Format-Table -AutoSize
             Write-Host "::endgroup::"
             Write-Host "::group::Updater logs"
-            Get-ChildItem (Join-Path $updateData "logs") -Filter "update-*.log" -ErrorAction SilentlyContinue |
+            Get-ChildItem $updateData -Filter "*.log" -Recurse -ErrorAction SilentlyContinue |
               ForEach-Object {
                 Write-Host "===== $($_.FullName) ====="
                 Get-Content $_.FullName -ErrorAction Continue
