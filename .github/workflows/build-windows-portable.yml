@@ -147,7 +147,13 @@ jobs:
             ) `
             -Wait `
             -PassThru
-          if ($handoff.ExitCode -ne 0) { throw "Launcher could not start updater" }
+          if ($handoff.ExitCode -ne 0) {
+            $launchError = Join-Path $updateData "updater-launch-error.log"
+            if (Test-Path $launchError) {
+              Get-Content $launchError
+            }
+            throw "Launcher could not start updater"
+          }
 
           $completed = $false
           $deadline = (Get-Date).AddSeconds(90)

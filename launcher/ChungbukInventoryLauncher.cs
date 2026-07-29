@@ -71,8 +71,19 @@ internal static class ChungbukInventoryLauncher
             {
                 Environment.Exit(2);
             }
-            catch
+            catch (Exception error)
             {
+                try
+                {
+                    Directory.CreateDirectory(testDataDir);
+                    File.WriteAllText(
+                        Path.Combine(testDataDir, "updater-launch-error.log"),
+                        error.ToString());
+                }
+                catch
+                {
+                    // Preserve the original updater-launch failure exit code.
+                }
                 Environment.Exit(1);
             }
         }
