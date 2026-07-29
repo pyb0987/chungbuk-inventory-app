@@ -253,6 +253,13 @@ jobs:
               "-NoDialogs"
             ) `
             -Wait -PassThru -NoNewWindow
+          if (Test-Path $rollbackLog) {
+            Write-Host "::group::Rollback updater log"
+            Get-Content $rollbackLog
+            Write-Host "::endgroup::"
+          } else {
+            Write-Host "Rollback updater log is missing: $rollbackLog"
+          }
           if ($negative.ExitCode -eq 0) { throw "Malformed update unexpectedly passed" }
           if ((Get-Content (Join-Path $rollbackInstall "APP_VERSION") -Raw).Trim() -ne "0.2.0") {
             throw "Rollback did not preserve previous installation"
