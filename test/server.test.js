@@ -462,6 +462,51 @@ test("local app server restores a backup directly from the backup list", async (
   }
 });
 
+test("full reset requires confirmation, clears all app data, and preserves an emergency backup", async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), "chungbuk-ui-"));
+  const app = await startAppServer({ port: 0, dataDir });
+  try {
+    const imported = await postJson(`${app.url}/api/import/current-stock`, {
+      sourceFile: "reset-test.xlsx",
+      occurredOn: "2026-08-03",
+      rows: [{ itemName: "초기화 시험 품목", partRoomQuantity: 3 }]
+    });
+    assert.equal(imported.state.items.length, 1);
+    assert.equal(imported.state.inventory.rows.length, 1);
+
+    await postJson(`${app.url}/api/factory-reset`, {}, 400);
+    const unchanged = await getJson(`${app.url}/api/state`);
+    assert.equal(unchanged.items.length, 1);
+
+    const reset = await postJson(
+      `${app.url}/api/factory-reset`,
+      { confirmation: "DELETE_ALL_DATA" },
+      200
+    );
+    assert.equal(reset.state.items.length, 0);
+    assert.equal(reset.state.people.length, 0);
+    assert.equal(reset.state.inventory.rows.length, 0);
+    assert.equal(reset.state.transactions.length, 0);
+    assert.equal(reset.state.serials.length, 0);
+    assert.equal(reset.state.auditLog.length, 0);
+    assert.equal(reset.state.importRuns.length, 0);
+    assert.equal(reset.state.legacyUsageRecords.length, 0);
+    assert.equal(reset.state.backups.length, 1);
+    assert.equal(reset.state.backups[0].reason, "전체 초기화 직전 자동 백업");
+    assert.equal(reset.reset.backup.filePath, reset.state.backups[0].filePath);
+
+    const restored = await postJson(
+      `${app.url}/api/backups/${reset.state.backups[0].id}/restore`,
+      {},
+      200
+    );
+    assert.equal(restored.state.items.length, 1);
+    assert.equal(restored.state.inventory.rows[0].partRoomQuantity, 3);
+  } finally {
+    await app.close();
+  }
+});
+
 async function getJson(url) {
   const response = await fetch(url);
   assert.equal(response.status, 200);

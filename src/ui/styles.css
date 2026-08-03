@@ -288,6 +288,38 @@ tr:last-child td {
   display: none;
 }
 
+.danger-zone {
+  margin-top: 24px;
+  border: 1px solid #d9a4a4;
+  border-radius: 8px;
+  background: #fff8f8;
+}
+
+.danger-zone > summary {
+  padding: 12px 14px;
+  color: #8a1c1c;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.danger-zone-content {
+  padding: 0 14px 14px;
+}
+
+.factory-reset-confirmation {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid #d9a4a4;
+  border-radius: 6px;
+}
+
+.danger-acknowledgement {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
 .action-group {
   display: flex;
   gap: 6px;

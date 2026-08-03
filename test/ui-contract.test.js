@@ -46,6 +46,10 @@ test("static UI keeps the confirmed Korean inventory workflow labels", () => {
     "오류 없는 행만 가져오기",
     "<th>사유</th>",
     "백업 복원",
+    "위험 작업",
+    "전체 초기화 준비",
+    "모든 앱 데이터가 삭제되는 것을 확인했습니다.",
+    "모든 데이터 삭제",
     "변경 기록",
     "가져오기 기록",
     "가져온 행",
@@ -95,7 +99,9 @@ test("client UI keeps confirmed movement previews and Korean-safe search", () =>
     "renderLegacyUsageRecords()",
     "legacyUsageRecords",
     "formatImportCreatedCounts(report)",
-    "가져오기 기록 없음"
+    "가져오기 기록 없음",
+    "/api/factory-reset",
+    "DELETE_ALL_DATA"
   ];
 
   for (const snippet of requiredClientSnippets) {

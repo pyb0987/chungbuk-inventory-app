@@ -45,6 +45,7 @@ import {
 import { parseCurrentStockWorkbook } from "../services/xlsx-current-stock-parser.js";
 import { parseUsageHistoryWorkbook } from "../services/xlsx-usage-history-parser.js";
 import { buildInventoryWorkbook } from "../services/inventory-xlsx-export.js";
+import { resetApplicationData } from "../services/reset-application-data.js";
 
 const currentFile = fileURLToPath(import.meta.url);
 const projectRoot = resolve(currentFile, "../../..");
@@ -400,6 +401,20 @@ async function handleApiRequest({ request, response, getDb, setDb, databasePath,
       reason: input.reason ?? "manual backup from UI"
     });
     sendJson(response, 201, { backup, state: buildState(db) });
+    return;
+  }
+
+  if (route === "POST /api/factory-reset") {
+    const input = await readJsonBody(request);
+    if (input.confirmation !== "DELETE_ALL_DATA") {
+      throw badRequest("전체 초기화 확인이 필요합니다");
+    }
+    const emergencyBackup = await createDatabaseBackup(db, {
+      backupDir,
+      reason: "전체 초기화 직전 자동 백업"
+    });
+    const backup = resetApplicationData(db, emergencyBackup);
+    sendJson(response, 200, { reset: { backup }, state: buildState(db) });
     return;
   }
 

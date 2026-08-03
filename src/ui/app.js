@@ -50,6 +50,10 @@ const elements = {
   backupForm: document.querySelector("#backup-form"),
   restoreForm: document.querySelector("#restore-form"),
   restoreResult: document.querySelector("#restore-result"),
+  prepareFactoryReset: document.querySelector("#prepare-factory-reset"),
+  factoryResetConfirmation: document.querySelector("#factory-reset-confirmation"),
+  factoryResetAcknowledgement: document.querySelector("#factory-reset-acknowledgement"),
+  factoryResetButton: document.querySelector("#factory-reset-button"),
   backupTable: document.querySelector("#backup-table"),
   auditTable: document.querySelector("#audit-table"),
   auditSearch: document.querySelector("#audit-search"),
@@ -277,6 +281,36 @@ function setupForms() {
       renderRestoreSuccess(payload.restore);
       elements.restoreForm.reset();
       setStatus("복원 완료");
+    }, elements.restoreResult);
+  });
+
+  elements.prepareFactoryReset.addEventListener("click", () => {
+    elements.factoryResetConfirmation.classList.remove("hidden");
+    elements.factoryResetAcknowledgement.focus();
+  });
+
+  elements.factoryResetAcknowledgement.addEventListener("change", () => {
+    elements.factoryResetButton.disabled = !elements.factoryResetAcknowledgement.checked;
+  });
+
+  elements.factoryResetButton.addEventListener("click", async () => {
+    const confirmed = window.confirm(
+      "품목, 개인, 재고, 입출고, 시리얼, 가져오기 및 변경 기록을 모두 삭제합니다. 화면에서 직접 되돌릴 수 없으며 백업 복원만 가능합니다. 정말 초기화할까요?"
+    );
+    if (!confirmed) {
+      return;
+    }
+    await runUiAction(async () => {
+      const payload = await apiRequest("/api/factory-reset", {
+        method: "POST",
+        body: { confirmation: "DELETE_ALL_DATA" }
+      });
+      elements.factoryResetAcknowledgement.checked = false;
+      elements.factoryResetButton.disabled = true;
+      elements.factoryResetConfirmation.classList.add("hidden");
+      const backupName = fileNameFromPath(payload.reset.backup.filePath);
+      elements.restoreResult.innerHTML = `<p>전체 초기화 완료. 초기화 직전 백업: ${escapeHtml(backupName)}</p>`;
+      setStatus("전체 초기화 완료");
     }, elements.restoreResult);
   });
 }
