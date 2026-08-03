@@ -44,6 +44,7 @@ import {
 } from "../services/read-models.js";
 import { parseCurrentStockWorkbook } from "../services/xlsx-current-stock-parser.js";
 import { parseUsageHistoryWorkbook } from "../services/xlsx-usage-history-parser.js";
+import { buildInventoryWorkbook } from "../services/inventory-xlsx-export.js";
 
 const currentFile = fileURLToPath(import.meta.url);
 const projectRoot = resolve(currentFile, "../../..");
@@ -153,6 +154,18 @@ async function handleApiRequest({ request, response, getDb, setDb, databasePath,
 
   if (route === "GET /api/state") {
     sendJson(response, 200, buildState(db));
+    return;
+  }
+
+  if (route === "GET /api/inventory-export.xlsx") {
+    const workbook = buildInventoryWorkbook(getInventoryWorkbookView(db));
+    const filename = `chungbuk-inventory-${todayIsoDate()}.xlsx`;
+    response.writeHead(200, {
+      "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Content-Length": workbook.length
+    });
+    response.end(workbook);
     return;
   }
 

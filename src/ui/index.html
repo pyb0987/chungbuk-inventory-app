@@ -70,7 +70,10 @@
         <section class="view" id="view-inventory">
           <div class="section-header">
             <h2>재고표</h2>
-            <input id="inventory-search" class="search-input" type="search" placeholder="품목 검색" />
+            <div class="section-actions">
+              <input id="inventory-search" class="search-input" type="search" placeholder="품목 검색" />
+              <a class="secondary-button button-link" href="/api/inventory-export.xlsx" download>엑셀로 내보내기</a>
+            </div>
           </div>
           <div class="table-wrap inventory-table-wrap">
             <table id="inventory-table"></table>

@@ -61,6 +61,7 @@ function validatePortableFolder(root) {
   expectFile(root, "src/services/read-models.js");
   expectFile(root, "src/services/xlsb-workbook-reader.js");
   expectFile(root, "src/services/xlsx-usage-history-parser.js");
+  expectFile(root, "src/services/inventory-xlsx-export.js");
   expectFile(root, "src/ui/index.html");
   expectFile(root, "scripts/build-windows-launcher.ps1");
   expectFile(root, "scripts/start-portable.mjs");
@@ -120,6 +121,7 @@ function validatePortableZip(zipPath) {
   expectZipEntry(entrySet, "src/services/read-models.js");
   expectZipEntry(entrySet, "src/services/xlsb-workbook-reader.js");
   expectZipEntry(entrySet, "src/services/xlsx-usage-history-parser.js");
+  expectZipEntry(entrySet, "src/services/inventory-xlsx-export.js");
   expectZipEntry(entrySet, "src/ui/index.html");
   expectZipEntry(entrySet, "scripts/build-windows-launcher.ps1");
   expectZipEntry(entrySet, "scripts/start-portable.mjs");

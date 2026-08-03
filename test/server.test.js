@@ -9,6 +9,7 @@ import {
   createUsageHistoryWorkbookFixture,
   createUsageHistoryXlsbWorkbookFixture
 } from "./support/xlsx-fixture.js";
+import { readXlsxWorkbook } from "../src/services/xlsx-current-stock-parser.js";
 
 test("local app server serves UI state and records a transaction", async () => {
   const dataDir = mkdtempSync(join(tmpdir(), "chungbuk-ui-"));
@@ -19,7 +20,7 @@ test("local app server serves UI state and records a transaction", async () => {
     assert.equal(initial.inventory.rows.length, 0);
     assert.deepEqual(
       initial.transactionTypes.map((entry) => entry.label),
-      ["개인 출고", "개인 반납", "개인 설치", "개인 회수", "서울로 반납", "서울에서 파트실로 택배", "사무실 출고", "사무실 입고"]
+      ["개인 출고", "개인 반납", "개인 설치", "개인 회수", "서울로 반납", "서울에서 파트실로 택배", "사무실 출고", "사무실 반출"]
     );
 
     const imported = await postJson(`${app.url}/api/import/current-stock`, {
@@ -39,6 +40,20 @@ test("local app server serves UI state and records a transaction", async () => {
     assert.equal(imported.report.status, "completed");
     assert.equal(imported.state.dashboard.totalStock, 6);
     assert.match(imported.state.backups[0].reason, /before current stock import: test-stock\.xlsx/);
+
+    const exportResponse = await fetch(`${app.url}/api/inventory-export.xlsx`);
+    assert.equal(exportResponse.status, 200);
+    assert.equal(
+      exportResponse.headers.get("content-type"),
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    assert.match(exportResponse.headers.get("content-disposition"), /\.xlsx/);
+    const exportedWorkbook = readXlsxWorkbook(Buffer.from(await exportResponse.arrayBuffer()));
+    assert.equal(exportedWorkbook.sheets[0].name, "재고표");
+    assert.deepEqual(exportedWorkbook.sheets[0].rows[0], [
+      "품목", "파트실", "정상호", "사무실", "개인/사무실 합계", "합계"
+    ]);
+    assert.deepEqual(exportedWorkbook.sheets[0].rows[1], ["공유기", 5, 1, 0, 1, 6]);
 
     const itemId = imported.state.items[0].id;
     const personId = imported.state.people[0].id;

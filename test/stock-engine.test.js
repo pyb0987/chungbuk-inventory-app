@@ -67,7 +67,7 @@ test("서울에서 파트실로 택배 and 서울 입고 increase part-room stoc
   assert.equal(totalForItem(next, 1), 5);
 });
 
-test("사무실 입고 moves office stock back to the part room", () => {
+test("사무실 반출 moves office stock back to the part room", () => {
   const stock = new Map([
     [stockKey(1, Buckets.PART_ROOM), 1],
     [stockKey(1, Buckets.OFFICE), 3]
@@ -145,4 +145,6 @@ test("legacy labels normalize to confirmed transaction types", () => {
   assert.equal(normalizeTransactionType("서울 입고"), TransactionTypes.SEOUL_TO_PART_ROOM);
   assert.equal(normalizeTransactionType("개인 설치"), TransactionTypes.PERSONAL_INSTALL);
   assert.equal(normalizeTransactionType("개인 회수"), TransactionTypes.PERSONAL_RECOVER);
+  assert.equal(normalizeTransactionType("사무실 반출"), TransactionTypes.OFFICE_IN);
+  assert.equal(normalizeTransactionType("사무실 입고"), TransactionTypes.OFFICE_IN);
 });

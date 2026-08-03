@@ -31,6 +31,7 @@ test("static UI keeps the confirmed Korean inventory workflow labels", () => {
   const requiredLabels = [
     "충북사무소 재고관리",
     "재고표",
+    "엑셀로 내보내기",
     "입출고 입력",
     "필요한 경우 입력",
     "수정 취소",
