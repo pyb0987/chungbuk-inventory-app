@@ -45,6 +45,7 @@ import {
 import { parseCurrentStockWorkbook } from "../services/xlsx-current-stock-parser.js";
 import { parseUsageHistoryWorkbook } from "../services/xlsx-usage-history-parser.js";
 import { buildInventoryWorkbook } from "../services/inventory-xlsx-export.js";
+import { buildTransactionWorkbook } from "../services/transaction-xlsx-export.js";
 import { resetApplicationData } from "../services/reset-application-data.js";
 
 const currentFile = fileURLToPath(import.meta.url);
@@ -161,6 +162,27 @@ async function handleApiRequest({ request, response, getDb, setDb, databasePath,
   if (route === "GET /api/inventory-export.xlsx") {
     const workbook = buildInventoryWorkbook(getInventoryWorkbookView(db));
     const filename = `chungbuk-inventory-${todayIsoDate()}.xlsx`;
+    response.writeHead(200, {
+      "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Content-Length": workbook.length
+    });
+    response.end(workbook);
+    return;
+  }
+
+  if (route === "GET /api/transaction-export.xlsx") {
+    const from = optionalIsoDate(url.searchParams.get("from"), "시작일");
+    const to = optionalIsoDate(url.searchParams.get("to"), "종료일");
+    if (from && to && from > to) {
+      throw badRequest("시작일은 종료일보다 늦을 수 없습니다");
+    }
+    const transactions = getTransactionHistoryView(db).filter(
+      (row) => (!from || row.date >= from) && (!to || row.date <= to)
+    );
+    const workbook = buildTransactionWorkbook(transactions);
+    const range = from || to ? `${from ?? "start"}-${to ?? "end"}` : todayIsoDate();
+    const filename = `chungbuk-transactions-${range}.xlsx`;
     response.writeHead(200, {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       "Content-Disposition": `attachment; filename="${filename}"`,
@@ -703,6 +725,21 @@ function badRequest(message) {
   const error = new Error(message);
   error.statusCode = 400;
   return error;
+}
+
+function optionalIsoDate(value, label) {
+  if (value === null || value.trim() === "") {
+    return null;
+  }
+  const normalized = value.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) {
+    throw badRequest(`${label} 형식이 올바르지 않습니다`);
+  }
+  const date = new Date(`${normalized}T00:00:00Z`);
+  if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== normalized) {
+    throw badRequest(`${label} 형식이 올바르지 않습니다`);
+  }
+  return normalized;
 }
 
 function httpStatusForError(error) {

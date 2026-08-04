@@ -63,6 +63,9 @@ const elements = {
   adjustmentPreview: document.querySelector("#adjustment-preview"),
   inventorySearch: document.querySelector("#inventory-search"),
   transactionSearch: document.querySelector("#transaction-search"),
+  transactionExportForm: document.querySelector("#transaction-export-form"),
+  transactionFrom: document.querySelector("#transaction-from"),
+  transactionTo: document.querySelector("#transaction-to"),
   cancelTransactionEdit: document.querySelector("#cancel-transaction-edit")
 };
 
@@ -97,6 +100,25 @@ function setupForms() {
   elements.transactionSearch.addEventListener("input", (event) => {
     state.transactionSearch = searchKey(event.target.value);
     renderTransactions();
+  });
+  elements.transactionFrom.addEventListener("change", renderTransactions);
+  elements.transactionTo.addEventListener("change", renderTransactions);
+  elements.transactionExportForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const from = elements.transactionFrom.value;
+    const to = elements.transactionTo.value;
+    if (from && to && from > to) {
+      setStatus("오류: 시작일은 종료일보다 늦을 수 없습니다");
+      return;
+    }
+    const query = new URLSearchParams();
+    if (from) query.set("from", from);
+    if (to) query.set("to", to);
+    const download = document.createElement("a");
+    download.href = `/api/transaction-export.xlsx?${query.toString()}`;
+    download.download = "";
+    download.click();
+    setStatus("입출고 내역 엑셀 다운로드 시작");
   });
 
   elements.auditSearch.addEventListener("input", () => {
@@ -750,11 +772,13 @@ function renderMasterDataRow(record, kind) {
 
 function renderTransactions() {
   const term = state.transactionSearch;
+  const from = elements.transactionFrom.value;
+  const to = elements.transactionTo.value;
   const rows = state.data.transactions.filter((row) => {
     const text = searchKey(
       [row.date, row.label, row.itemName, row.personName, row.serialText, row.note].join(" ")
     );
-    return text.includes(term);
+    return text.includes(term) && (!from || row.date >= from) && (!to || row.date <= to);
   });
 
   elements.transactionTable.innerHTML = rows.length

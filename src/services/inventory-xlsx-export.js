@@ -12,10 +12,15 @@ export function buildInventoryWorkbook(inventory) {
       row.totalQuantity
     ])
   ];
+  return buildTabularWorkbook({ sheetName: "재고표", rows: matrix });
+}
+
+export function buildTabularWorkbook({ sheetName, rows }) {
+  const matrix = rows;
   const files = [
     ["[Content_Types].xml", contentTypesXml()],
     ["_rels/.rels", rootRelationshipsXml()],
-    ["xl/workbook.xml", workbookXml()],
+    ["xl/workbook.xml", workbookXml(sheetName)],
     ["xl/_rels/workbook.xml.rels", workbookRelationshipsXml()],
     ["xl/styles.xml", stylesXml()],
     ["xl/worksheets/sheet1.xml", worksheetXml(matrix)]
@@ -76,10 +81,11 @@ function rootRelationshipsXml() {
 </Relationships>`;
 }
 
-function workbookXml() {
+function workbookXml(sheetName) {
+  const safeSheetName = String(sheetName ?? "Sheet1").slice(0, 31) || "Sheet1";
   return `<?xml version="1.0" encoding="UTF-8"?>
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-  <sheets><sheet name="재고표" sheetId="1" r:id="rId1"/></sheets>
+  <sheets><sheet name="${escapeXml(safeSheetName)}" sheetId="1" r:id="rId1"/></sheets>
 </workbook>`;
 }
 

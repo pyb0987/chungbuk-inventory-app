@@ -214,6 +214,53 @@ test("local app server returns the static UI", async () => {
   }
 });
 
+test("transaction history export applies an inclusive date range", async () => {
+  const dataDir = mkdtempSync(join(tmpdir(), "chungbuk-ui-"));
+  const app = await startAppServer({ port: 0, dataDir });
+  try {
+    const imported = await postJson(`${app.url}/api/import/current-stock`, {
+      sourceFile: "transaction-export.xlsx",
+      occurredOn: "2026-07-01",
+      rows: [{ itemName: "기간 시험 품목", partRoomQuantity: 5 }]
+    });
+    const itemId = imported.state.items[0].id;
+    await postJson(`${app.url}/api/transactions`, {
+      occurredOn: "2026-07-10",
+      type: "서울로 반납",
+      itemId,
+      quantity: 1,
+      serialText: "OUTSIDE-RANGE"
+    }, 201);
+    await postJson(`${app.url}/api/transactions`, {
+      occurredOn: "2026-07-20",
+      type: "서울로 반납",
+      itemId,
+      quantity: 2,
+      serialText: "INSIDE-RANGE",
+      note: "기간 내 기록"
+    }, 201);
+
+    const response = await fetch(
+      `${app.url}/api/transaction-export.xlsx?from=2026-07-20&to=2026-07-20`
+    );
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("content-disposition"), /2026-07-20-2026-07-20/);
+    const workbook = readXlsxWorkbook(Buffer.from(await response.arrayBuffer()));
+    assert.equal(workbook.sheets[0].name, "입출고 내역");
+    assert.deepEqual(workbook.sheets[0].rows, [
+      ["날짜", "구분", "품목", "개인", "수량", "시리얼", "메모", "상태"],
+      ["2026-07-20", "서울로 반납", "기간 시험 품목", "", 2, "INSIDE-RANGE", "기간 내 기록", "정상"]
+    ]);
+
+    const invalidRange = await fetch(
+      `${app.url}/api/transaction-export.xlsx?from=2026-07-21&to=2026-07-20`
+    );
+    assert.equal(invalidRange.status, 400);
+  } finally {
+    await app.close();
+  }
+});
+
 test("local app server deactivates and reactivates items and people", async () => {
   const dataDir = mkdtempSync(join(tmpdir(), "chungbuk-ui-"));
   const app = await startAppServer({ port: 0, dataDir });

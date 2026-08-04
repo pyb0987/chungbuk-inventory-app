@@ -33,6 +33,9 @@ test("static UI keeps the confirmed Korean inventory workflow labels", () => {
     "재고표",
     "엑셀로 내보내기",
     "입출고 입력",
+    "기간 내역 엑셀로 내보내기",
+    "입출고 시작일",
+    "입출고 종료일",
     "필요한 경우 입력",
     "수정 취소",
     "현재 재고 가져오기",
@@ -100,6 +103,8 @@ test("client UI keeps confirmed movement previews and Korean-safe search", () =>
     "legacyUsageRecords",
     "formatImportCreatedCounts(report)",
     "가져오기 기록 없음",
+    "/api/transaction-export.xlsx",
+    "시작일은 종료일보다 늦을 수 없습니다",
     "/api/factory-reset",
     "DELETE_ALL_DATA"
   ];

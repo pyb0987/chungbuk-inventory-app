@@ -583,3 +583,11 @@ textarea:focus {
   gap: 0.5rem;
   flex-wrap: wrap;
 }
+
+.transaction-history-actions,
+.date-export-form {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}

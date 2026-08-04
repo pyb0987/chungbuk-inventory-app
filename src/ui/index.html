@@ -209,7 +209,15 @@
           <section class="panel">
             <div class="section-header">
               <h2>입출고 내역</h2>
-              <input id="transaction-search" class="search-input" type="search" placeholder="품목, 개인, 시리얼, 메모 검색" />
+              <div class="transaction-history-actions">
+                <form id="transaction-export-form" class="date-export-form">
+                  <input id="transaction-from" name="from" type="date" aria-label="입출고 시작일" />
+                  <span>~</span>
+                  <input id="transaction-to" name="to" type="date" aria-label="입출고 종료일" />
+                  <button class="secondary-button" type="submit">기간 내역 엑셀로 내보내기</button>
+                </form>
+                <input id="transaction-search" class="search-input" type="search" placeholder="품목, 개인, 시리얼, 메모 검색" />
+              </div>
             </div>
             <div class="table-wrap">
               <table>
