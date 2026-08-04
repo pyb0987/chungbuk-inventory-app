@@ -584,10 +584,49 @@ textarea:focus {
   flex-wrap: wrap;
 }
 
-.transaction-history-actions,
+.transaction-history-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  flex: 1;
+  flex-wrap: nowrap;
+}
+
 .date-export-form {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+}
+
+.date-export-form input[type="date"] {
+  width: 150px;
+  flex: 0 0 150px;
+}
+
+.date-export-form button {
+  white-space: nowrap;
+}
+
+.transaction-history-actions .search-input {
+  width: 250px;
+  flex: 0 1 250px;
+  min-width: 180px;
+}
+
+@media (max-width: 640px) {
+  .transaction-history-actions,
+  .date-export-form {
+    align-items: stretch;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .date-export-form input[type="date"],
+  .transaction-history-actions .search-input {
+    width: 100%;
+    min-width: 0;
+    flex-basis: auto;
+  }
 }
